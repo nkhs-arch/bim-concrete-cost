@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-05 11:23",
+  "generated_at": "2026-10-12 11:38",
   "is_sample": false,
   "region": "北區",
   "price_month": "2026-08",
@@ -111,37 +111,37 @@
   ],
   "logs": [
     {
-      "time": "11:22:55",
+      "time": "11:37:29",
       "tag": "INFO",
-      "msg": "開始估算（2026-10-05）"
+      "msg": "開始估算（2026-10-12）"
     },
     {
-      "time": "11:22:55",
+      "time": "11:37:29",
       "tag": "TAKEOFF",
       "msg": "讀取 quantities.xlsx：3 類構件，總體積 4,463.52 m³"
     },
     {
-      "time": "11:22:55",
+      "time": "11:37:29",
       "tag": "MODEL",
       "msg": "體積檔案沒有變動，沿用 V1"
     },
     {
-      "time": "11:23:56",
+      "time": "11:38:30",
       "tag": "WARN",
       "msg": "工程會價格下載失敗（<urlopen error timed out>），改用上次的資料"
     },
     {
-      "time": "11:23:59",
-      "tag": "PRICE",
-      "msg": "主計總處水泥類指數 最新 2026-08 = 123.24"
+      "time": "11:38:30",
+      "tag": "WARN",
+      "msg": "物價指數下載失敗（<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>），改用上次的資料"
     },
     {
-      "time": "11:23:59",
+      "time": "11:38:30",
       "tag": "PRICE",
       "msg": "換算後 2026-08 單價：210 kgf NT$ 3,055、280 kgf NT$ 3,252、350 kgf NT$ 3,418"
     },
     {
-      "time": "11:23:59",
+      "time": "11:38:30",
       "tag": "SUCCESS",
       "msg": "V1 總體積 4,463.52 m³，總成本 NT$ 14,515,367"
     }
