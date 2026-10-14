@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-14 19:58",
+  "generated_at": "2026-10-14 20:00",
   "is_sample": false,
   "region": "北區",
   "price_month": "2026-08",
@@ -111,6 +111,11 @@
     }
   ],
   "carbon_factors": {
+    "80": {
+      "factor": 207.0,
+      "year": 2017,
+      "source": "公路總局蘇花公路改善工程處"
+    },
     "140": {
       "factor": 200.0,
       "year": 2020,
@@ -140,51 +145,46 @@
       "factor": 483.0,
       "year": 2019,
       "source": "公路總局西部濱海公路南區臨時工程處"
-    },
-    "80": {
-      "factor": 207.0,
-      "year": 2017,
-      "source": "公路總局蘇花公路改善工程處"
     }
   },
   "logs": [
     {
-      "time": "19:57:58",
+      "time": "19:59:16",
       "tag": "INFO",
       "msg": "開始估算（2026-10-14）"
     },
     {
-      "time": "19:58:00",
+      "time": "19:59:16",
       "tag": "TAKEOFF",
       "msg": "讀取 quantities.xlsx：3 類構件，總體積 4,463.52 m³"
     },
     {
-      "time": "19:58:00",
+      "time": "19:59:16",
       "tag": "MODEL",
       "msg": "體積檔案沒有變動，沿用 V1"
     },
     {
-      "time": "19:58:00",
-      "tag": "PRICE",
-      "msg": "工程會基準價（2026-04・北區）280 kgf = NT$ 3,260"
-    },
-    {
-      "time": "19:58:00",
+      "time": "20:00:17",
       "tag": "WARN",
-      "msg": "物價指數下載失敗（<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1129)>），改用上次的資料"
+      "msg": "工程會價格下載失敗（<urlopen error timed out>），改用上次的資料"
     },
     {
-      "time": "19:58:00",
+      "time": "20:00:18",
+      "tag": "WARN",
+      "msg": "物價指數下載失敗（<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>），改用上次的資料"
+    },
+    {
+      "time": "20:00:21",
       "tag": "CARBON",
       "msg": "環境部碳足跡係數 280 kgf = 338.0 kgCO2e/m³（2020 年公告）"
     },
     {
-      "time": "19:58:00",
+      "time": "20:00:21",
       "tag": "PRICE",
       "msg": "換算後 2026-08 單價：210 kgf NT$ 3,055、280 kgf NT$ 3,252、350 kgf NT$ 3,418"
     },
     {
-      "time": "19:58:00",
+      "time": "20:00:21",
       "tag": "SUCCESS",
       "msg": "V1 總體積 4,463.52 m³，總成本 NT$ 14,515,367，蘊含碳 1,508.7 tCO2e"
     }
