@@ -257,6 +257,48 @@
             </div>
         </div>
 
+        <!-- 6D 永續：混凝土蘊含碳 -->
+        <div id="carbon-section" class="hidden bg-dark-card border border-dark-border rounded-xl p-5">
+            <div class="flex flex-wrap gap-2 items-start justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-white flex items-center">
+                        <i class="fa-solid fa-leaf mr-2 text-emerald-400"></i>6D 永續：混凝土蘊含碳排放
+                    </h3>
+                    <p class="text-xs text-slate-400">體積 × 環境部碳足跡排放係數，評估方式參照建研所《低碳（低蘊含碳）建築評估手冊》（LEBR）</p>
+                </div>
+                <span class="text-xs font-mono text-slate-400" id="carbon-version">--</span>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-dark-bg border border-dark-border rounded-xl p-4 flex flex-col justify-center">
+                    <span class="text-xs text-slate-400">混凝土蘊含碳總量</span>
+                    <div class="flex items-baseline space-x-2 mt-1">
+                        <span class="text-3xl font-bold font-mono text-emerald-400" id="carbon-total">--</span>
+                        <span class="text-xs text-slate-400">公噸 CO₂e</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-2" id="carbon-equiv"></p>
+                </div>
+
+                <div class="lg:col-span-2 overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead>
+                            <tr class="bg-dark-bg text-slate-400 border-b border-dark-border">
+                                <th class="p-2.5 rounded-l">構件</th>
+                                <th class="p-2.5 text-right">數量 (m³)</th>
+                                <th class="p-2.5 text-right">係數 (kgCO₂e/m³)</th>
+                                <th class="p-2.5 text-right rounded-r">碳排 (公噸 CO₂e)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-dark-border/60 text-slate-200" id="carbon-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <p class="mt-4 pt-3 border-t border-dark-border text-xs text-slate-400">
+                * 係數：<span id="carbon-note">--</span>。目前只算混凝土材料，尚未含鋼筋、模板與施工機具；鋼筋重量完成後再加入。
+            </p>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 bg-dark-card border border-dark-border rounded-xl p-5 flex flex-col justify-between">
                 <div>
@@ -324,7 +366,7 @@
         const COLORS = { floors: '#06b6d4', columns: '#3b82f6', beams: '#10b981', walls: '#f59e0b' };
         const ORDER = ['floors', 'columns', 'beams', 'walls'];
 
-        const TAG_COLORS = { INFO: 'text-blue-400', TAKEOFF: 'text-amber-400', MODEL: 'text-cyan-400', PRICE: 'text-purple-400', SUCCESS: 'text-emerald-400' };
+        const TAG_COLORS = { INFO: 'text-blue-400', TAKEOFF: 'text-amber-400', MODEL: 'text-cyan-400', PRICE: 'text-purple-400', CARBON: 'text-emerald-400', SUCCESS: 'text-emerald-400' };
 
         let data, volumePieChart, versionTrendChart, costHistoryChart;
 
@@ -512,6 +554,38 @@
                 </tr>`;
             }).join('');
             document.getElementById('table-total-sum').innerText = `合計: ${nt(sum)}`;
+
+            renderCarbon(v, keys);
+        }
+
+        function renderCarbon(v, keys) {
+            const factors = data.carbon_factors;
+            if (!factors) return;  // 舊版 data.json 沒有碳排資料
+            document.getElementById('carbon-section').classList.remove('hidden');
+            const factorFor = el => factors[el.grade] ?? factors['280'];
+
+            document.getElementById('carbon-version').innerText = v.version;
+            document.getElementById('carbon-total').innerText = v.carbon_tco2e.toLocaleString('en-US', { minimumFractionDigits: 1 });
+            document.getElementById('carbon-equiv').innerText =
+                `平均每 m³ 混凝土 ${Math.round(v.carbon_tco2e * 1000 / v.total_volume)} kgCO₂e`;
+
+            document.getElementById('carbon-table-body').innerHTML = keys.map(k => {
+                const el = v.elements[k];
+                const f = factorFor(el).factor;
+                return `<tr class="hover:bg-dark-hover transition">
+                    <td class="p-2.5 font-medium text-white">${ELEMENT_NAMES[k].split(' (')[1].replace(')', '')}（${el.grade} kgf）</td>
+                    <td class="p-2.5 text-right text-cyan-400">${el.volume.toFixed(2)}</td>
+                    <td class="p-2.5 text-right">${f}</td>
+                    <td class="p-2.5 text-right text-emerald-400 font-semibold">${(el.volume * f / 1000).toFixed(1)}</td>
+                </tr>`;
+            }).join('');
+
+            const used = [...new Set(keys.map(k => v.elements[k].grade))].map(g => {
+                const f = factors[g] ?? factors['280'];
+                return `${factors[g] ? g : '280'} kgf ${f.factor}（${f.source}，${f.year} 年公告）`;
+            });
+            document.getElementById('carbon-note').innerText =
+                `環境部「碳足跡排放係數」開放資料，預拌混凝土 ${used.join('；')}`;
         }
 
         function renderLogs() {

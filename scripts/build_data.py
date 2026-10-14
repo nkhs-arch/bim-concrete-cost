@@ -10,9 +10,14 @@ BIM 混凝土成本自動估算：把 Forma Takeoff 匯出的體積 × 最新單
   調整：  主計總處「營造工程物價指數」水泥及其製品類指數，每月更新
   最新單價 = 基準價 × 最新月份指數 ÷ 基準價月份指數
 
+碳排（6D 永續，自動下載）：
+  環境部「碳足跡排放係數」開放資料，取各強度「預拌混凝土」最新公告的係數（kgCO2e/m³）
+  蘊含碳 = 體積 × 係數
+
 自動維護（不要手動改）：
   versions.json      ← 偵測到 quantities 內容變動時，自動新增一個版本
   price_cache.json   ← 最近一次成功下載的價格資料，網站連不上時拿來備用
+  carbon_cache.json  ← 最近一次成功下載的碳排係數，網站連不上時拿來備用
 
 輸出：
   data.json          ← 給 index.html 讀取
@@ -37,6 +42,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT, "data")
 OUTPUT_FILE = os.path.join(ROOT, "data.json")
 CACHE_FILE = os.path.join(DATA_DIR, "price_cache.json")
+CARBON_CACHE_FILE = os.path.join(DATA_DIR, "carbon_cache.json")
 
 TW = timezone(timedelta(hours=8))
 
@@ -44,6 +50,11 @@ PCC_PRICE_URL = ("https://pcic.pcc.gov.tw/pwc-web/api/service/opendata-file/docu
                  + urllib.parse.quote("預拌混凝土.csv"))
 DGBAS_INDEX_URL = "https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230553/pr0501a1m.xml"
 INDEX_ITEM = "水泥及其製品類"
+# api_key 是政府資料開放平臺（data.gov.tw/dataset/28176）公開提供的下載金鑰
+CFP_URL = ("https://data.moenv.gov.tw/api/v2/cfp_p_02?api_key=4c89a32a-a214-461b-bf29-30ff32a61a8a"
+           "&limit=1000&offset={offset}&format=CSV")
+# 只取一般預拌混凝土，例如「預拌混凝土(280 kgf/cm2)」；水中、自充填、加飛灰爐石等特殊配比不算
+CFP_CONCRETE = re.compile(r"^預拌混凝土\((\d{2,3})\s*kgf/cm2\)$")
 
 DEFAULT_GRADE = "280"
 DEFAULT_REGION = "北區"
@@ -272,6 +283,63 @@ def cost_of(elements, prices):
     return sum(el["volume"] * prices.get(el["grade"], fallback) for el in elements.values())
 
 
+# ---------- 碳排係數（環境部開放資料） ----------
+
+def fetch_carbon_factors():
+    """回傳 {強度: {"factor": kgCO2e/m³, "year": 公告年, "source": 公告單位}}。
+    同一強度有多筆時取最新年份；同一年有多筆時取平均。"""
+    rows, offset = [], 0
+    while True:
+        text = download(CFP_URL.format(offset=offset)).decode("utf-8-sig")
+        page = list(csv.DictReader(io.StringIO(text)))
+        rows += page
+        if len(page) < 1000:
+            break
+        offset += 1000
+
+    found = {}
+    for row in rows:
+        m = CFP_CONCRETE.match(row.get("name", "").strip())
+        if not m or "m3" not in row.get("unit", ""):
+            continue
+        year = int(row["announcementyear"])
+        best = found.get(m.group(1))
+        if best is None or year > best["year"]:
+            found[m.group(1)] = {"year": year, "values": [float(row["coe"])], "sources": {row["departmentname"]}}
+        elif year == best["year"]:
+            best["values"].append(float(row["coe"]))
+            best["sources"].add(row["departmentname"])
+
+    if not found:
+        raise ValueError("碳足跡係數檔裡找不到預拌混凝土")
+    return {g: {"factor": round(sum(f["values"]) / len(f["values"]), 1), "year": f["year"],
+                "source": "、".join(sorted(f["sources"]))}
+            for g, f in sorted(found.items(), key=lambda kv: int(kv[0]))}
+
+
+def load_carbon_factors():
+    try:
+        factors = fetch_carbon_factors()
+        with open(CARBON_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(factors, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        if not os.path.exists(CARBON_CACHE_FILE):
+            raise
+        log("WARN", f"碳排係數下載失敗（{e}），改用上次的資料")
+        with open(CARBON_CACHE_FILE, encoding="utf-8") as f:
+            factors = json.load(f)
+    f280 = factors.get(DEFAULT_GRADE)
+    if f280:
+        log("CARBON", f"環境部碳足跡係數 280 kgf = {f280['factor']} kgCO2e/m³（{f280['year']} 年公告）")
+    return factors
+
+
+def carbon_of(elements, factors):
+    """回傳公噸 CO2e。"""
+    fallback = factors.get(DEFAULT_GRADE) or next(iter(factors.values()))
+    return sum(el["volume"] * factors.get(el["grade"], fallback)["factor"] for el in elements.values()) / 1000
+
+
 # ---------- 版本 ----------
 
 def update_versions(date, digest, elements, info):
@@ -321,6 +389,7 @@ def main():
     months = sorted(cache["index"])
     latest, previous = months[-1], months[-2]
     prices = prices_for(latest, cache)
+    carbon_factors = load_carbon_factors()
     log("PRICE", f"換算後 {latest} 單價：" + "、".join(f"{g} kgf NT$ {prices[g]:,}" for g in ("210", "280", "350") if g in prices))
 
     # 每個版本都用「目前單價」計算，版本之間才能公平比較
@@ -328,6 +397,7 @@ def main():
         v["total_volume"] = round(sum(e["volume"] for e in v["elements"].values()), 2)
         v["element_count"] = sum(e["count"] for e in v["elements"].values())
         v["cost_at_current_price"] = round(cost_of(v["elements"], prices))
+        v["carbon_tco2e"] = round(carbon_of(v["elements"], carbon_factors), 1)
 
     # 成本走勢：目前模型 × 過去 12 個月的單價
     latest_version = versions[-1]
@@ -337,7 +407,8 @@ def main():
     ]
 
     log("SUCCESS", f"{latest_version['version']} 總體積 {latest_version['total_volume']:,.2f} m³，"
-                   f"總成本 NT$ {latest_version['cost_at_current_price']:,}")
+                   f"總成本 NT$ {latest_version['cost_at_current_price']:,}，"
+                   f"蘊含碳 {latest_version['carbon_tco2e']:,.1f} tCO2e")
 
     output = {
         "generated_at": datetime.now(TW).strftime("%Y-%m-%d %H:%M"),
@@ -351,6 +422,7 @@ def main():
         "previous_prices": prices_for(previous, cache),
         "versions": versions,
         "cost_history": cost_history,
+        "carbon_factors": carbon_factors,
         "logs": logs,
     }
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:

@@ -26,6 +26,14 @@ data.json → index.html 網頁儀表板
 
 最新單價 = 工程會基準價 × 最新月份指數 ÷ 基準價月份指數
 
+## 碳排放（6D 永續）
+
+| 資料 | 提供機關 | 更新頻率 |
+|---|---|---|
+| [碳足跡排放係數](https://data.gov.tw/dataset/28176)（預拌混凝土各強度，kgCO₂e/m³） | 環境部 | 不定期 |
+
+蘊含碳 = 混凝土體積 × 係數。同一強度有多筆係數時，取最新公告年份（同年多筆取平均），水中、自充填、加飛灰爐石等特殊配比不採用。評估方式參照建研所《低碳（低蘊含碳）建築評估手冊》（LEBR）。目前只算混凝土，鋼筋重量完成後再加入。
+
 > 工程會網站無法從 GitHub 的海外主機連線，所以自動更新時沿用 `data/price_cache.json` 裡的基準價，只更新物價指數。要更新基準價時，在自己電腦執行一次 `python scripts/build_data.py` 再上傳即可。
 
 ## 常見操作
@@ -62,6 +70,7 @@ python scripts/export_offline.py
 | `data/model_info.json` | 模型名稱、版本備註、工地區域、混凝土強度 |
 | `data/versions.json` | 各版本體積紀錄（自動維護） |
 | `data/price_cache.json` | 最近一次下載的單價資料（自動維護） |
+| `data/carbon_cache.json` | 最近一次下載的碳排係數（自動維護） |
 | `scripts/build_data.py` | 主程式：讀體積、抓單價、算成本 |
 | `scripts/export_offline.py` | 匯出離線版 HTML |
 | `scripts/certs/` | 補上主計總處網站缺少的 TWCA 中繼憑證 |
