@@ -181,9 +181,18 @@ def load_quantities(grades):
 # ---------- 單價（政府開放資料） ----------
 
 def ssl_context():
-    # 政府網站常漏送中繼憑證（Windows 會自動補，Linux 不會），所以額外載入 TWCA 中繼憑證；仍是完整驗證
+    # 政府網站常漏送中繼憑證，所以額外載入 scripts/certs/ 裡的 TWCA 中繼憑證；仍是完整驗證
+    # 主計總處 2026 年改用「TWCA CYBER Root CA」，舊版 Windows 沒有這張根憑證，有裝 certifi 就一併載入
     ctx = ssl.create_default_context()
-    ctx.load_verify_locations(cafile=os.path.join(ROOT, "scripts", "certs", "twca_secure_ssl_ca.pem"))
+    try:
+        import certifi
+        ctx.load_verify_locations(cafile=certifi.where())
+    except ImportError:
+        pass
+    cert_dir = os.path.join(ROOT, "scripts", "certs")
+    for name in sorted(os.listdir(cert_dir)):
+        if name.endswith(".pem"):
+            ctx.load_verify_locations(cafile=os.path.join(cert_dir, name))
     return ctx
 
 

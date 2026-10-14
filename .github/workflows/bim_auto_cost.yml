@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - run: pip install openpyxl
+      - run: pip install openpyxl certifi
 
       - run: python scripts/build_data.py
 

@@ -1,12 +1,22 @@
 {
-  "generated_at": "2026-10-14 20:00",
+  "generated_at": "2026-10-14 20:03",
   "is_sample": false,
   "region": "北區",
-  "price_month": "2026-08",
+  "price_month": "2026-09",
   "base_period": "2026-04",
   "base_index": 123.56,
-  "latest_index": 123.24,
+  "latest_index": 123.0,
   "prices": {
+    "140": 2892,
+    "175": 2959,
+    "210": 3049,
+    "245": 3112,
+    "280": 3245,
+    "315": 3312,
+    "350": 3411,
+    "420": 3641
+  },
+  "previous_prices": {
     "140": 2897,
     "175": 2964,
     "210": 3055,
@@ -15,16 +25,6 @@
     "315": 3318,
     "350": 3418,
     "420": 3649
-  },
-  "previous_prices": {
-    "140": 2900,
-    "175": 2967,
-    "210": 3058,
-    "245": 3121,
-    "280": 3254,
-    "315": 3321,
-    "350": 3421,
-    "420": 3652
   },
   "versions": [
     {
@@ -56,15 +56,11 @@
       },
       "total_volume": 4463.52,
       "element_count": 1699,
-      "cost_at_current_price": 14515367,
+      "cost_at_current_price": 14484122,
       "carbon_tco2e": 1508.7
     }
   ],
   "cost_history": [
-    {
-      "month": "2025-09",
-      "cost": 14600174
-    },
     {
       "month": "2025-10",
       "cost": 14591247
@@ -108,6 +104,10 @@
     {
       "month": "2026-08",
       "cost": 14515367
+    },
+    {
+      "month": "2026-09",
+      "cost": 14484122
     }
   ],
   "carbon_factors": {
@@ -149,44 +149,44 @@
   },
   "logs": [
     {
-      "time": "19:59:16",
+      "time": "20:03:07",
       "tag": "INFO",
       "msg": "開始估算（2026-10-14）"
     },
     {
-      "time": "19:59:16",
+      "time": "20:03:08",
       "tag": "TAKEOFF",
       "msg": "讀取 quantities.xlsx：3 類構件，總體積 4,463.52 m³"
     },
     {
-      "time": "19:59:16",
+      "time": "20:03:08",
       "tag": "MODEL",
       "msg": "體積檔案沒有變動，沿用 V1"
     },
     {
-      "time": "20:00:17",
-      "tag": "WARN",
-      "msg": "工程會價格下載失敗（<urlopen error timed out>），改用上次的資料"
+      "time": "20:03:08",
+      "tag": "PRICE",
+      "msg": "工程會基準價（2026-04・北區）280 kgf = NT$ 3,260"
     },
     {
-      "time": "20:00:18",
-      "tag": "WARN",
-      "msg": "物價指數下載失敗（<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>），改用上次的資料"
+      "time": "20:03:09",
+      "tag": "PRICE",
+      "msg": "主計總處水泥類指數 最新 2026-09 = 123.0"
     },
     {
-      "time": "20:00:21",
+      "time": "20:03:10",
       "tag": "CARBON",
       "msg": "環境部碳足跡係數 280 kgf = 338.0 kgCO2e/m³（2020 年公告）"
     },
     {
-      "time": "20:00:21",
+      "time": "20:03:10",
       "tag": "PRICE",
-      "msg": "換算後 2026-08 單價：210 kgf NT$ 3,055、280 kgf NT$ 3,252、350 kgf NT$ 3,418"
+      "msg": "換算後 2026-09 單價：210 kgf NT$ 3,049、280 kgf NT$ 3,245、350 kgf NT$ 3,411"
     },
     {
-      "time": "20:00:21",
+      "time": "20:03:10",
       "tag": "SUCCESS",
-      "msg": "V1 總體積 4,463.52 m³，總成本 NT$ 14,515,367，蘊含碳 1,508.7 tCO2e"
+      "msg": "V1 總體積 4,463.52 m³，總成本 NT$ 14,484,122，蘊含碳 1,508.7 tCO2e"
     }
   ]
 }
