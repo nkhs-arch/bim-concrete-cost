@@ -4,6 +4,7 @@ BIM 混凝土成本自動估算：把 Forma Takeoff 匯出的體積 × 最新單
 輸入（都在 data/ 資料夾）：
   quantities.xlsx 或 quantities.csv  ← 從 Forma Takeoff 匯出，模型改版時覆蓋這一份就好
   model_info.json                    ← 模型名稱、備註、工地區域、各構件混凝土強度
+  changelog.json                     ← 網站更新日誌（手動維護，新的寫在最上面）
 
 單價（自動下載，皆為政府開放資料）：
   基準價：公共工程委員會「大宗資材之混凝土價格調查」各強度、各區域單價
@@ -97,6 +98,14 @@ def load_model_info():
     path = os.path.join(DATA_DIR, "model_info.json")
     if not os.path.exists(path):
         return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_changelog():
+    path = os.path.join(DATA_DIR, "changelog.json")
+    if not os.path.exists(path):
+        return []
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
@@ -468,6 +477,7 @@ def main():
         "versions": versions,
         "cost_history": cost_history,
         "carbon_factors": carbon_factors,
+        "changelog": load_changelog(),
         "logs": logs,
     }
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:

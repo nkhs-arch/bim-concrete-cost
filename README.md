@@ -51,6 +51,9 @@ Takeoff 匯出檔沒有強度資料，預設全部用 280 kgf/cm²。要指定�
 "grades": { "columns": "350", "beams": "280", "floors": "280" }
 ```
 
+### 寫更新日誌
+網站功能或資料有變動時，在 `data/changelog.json` 最上面加一筆（日期＋項目），`type` 可用「新功能」「修正」「資料」「其他」。上傳後網站會自動更新。
+
 ### 手動重新估算
 GitHub → **Actions** → **BIM 混凝土成本自動估算** → **Run workflow**
 
@@ -68,6 +71,7 @@ python scripts/export_offline.py
 | `data.json` | 計算結果（自動產生，不要手動改） |
 | `data/quantities.xlsx` | Forma Takeoff 匯出的體積 |
 | `data/model_info.json` | 模型名稱、版本備註、工地區域、混凝土強度 |
+| `data/changelog.json` | 網站更新日誌（手動維護） |
 | `data/versions.json` | 各版本體積紀錄（自動維護） |
 | `data/price_cache.json` | 最近一次下載的單價資料（自動維護） |
 | `data/carbon_cache.json` | 最近一次下載的碳排係數（自動維護） |

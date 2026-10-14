@@ -8,6 +8,7 @@ on:
     paths:                      # 上傳新的 Takeoff 匯出檔、改設定或改程式時，立刻重算
       - 'data/quantities.*'
       - 'data/model_info.json'
+      - 'data/changelog.json'
       - 'scripts/**'
 
 permissions:

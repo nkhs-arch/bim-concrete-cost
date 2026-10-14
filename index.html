@@ -344,6 +344,14 @@
             </div>
         </div>
 
+        <!-- 更新日誌 -->
+        <div id="changelog-section" class="hidden bg-dark-card border border-dark-border rounded-xl p-5">
+            <h3 class="text-sm font-semibold text-white flex items-center mb-4">
+                <i class="fa-solid fa-clock-rotate-left mr-2 text-blue-400"></i>更新日誌
+            </h3>
+            <div class="space-y-4" id="changelog-list"></div>
+        </div>
+
     </main>
 
     <footer class="bg-dark-card border-t border-dark-border mt-8 py-4">
@@ -403,6 +411,7 @@
             renderVersionButtons();
             showVersion(data.versions.length - 1);
             renderLogs();
+            renderChangelog();
         }
 
         function renderHeader() {
@@ -586,6 +595,26 @@
             });
             document.getElementById('carbon-note').innerText =
                 `環境部「碳足跡排放係數」開放資料，預拌混凝土 ${used.join('；')}`;
+        }
+
+        function renderChangelog() {
+            if (!data.changelog?.length) return;
+            const TYPE_COLORS = {
+                '新功能': 'bg-cyan-950 text-cyan-400 border-cyan-800',
+                '修正': 'bg-rose-950 text-rose-400 border-rose-800',
+                '資料': 'bg-amber-950 text-amber-400 border-amber-800'
+            };
+            document.getElementById('changelog-section').classList.remove('hidden');
+            document.getElementById('changelog-list').innerHTML = data.changelog.map(entry => `
+                <div class="flex flex-col sm:flex-row gap-1 sm:gap-4">
+                    <div class="sm:w-28 shrink-0 text-xs font-mono text-slate-400 pt-0.5">${entry.date}</div>
+                    <ul class="flex-1 space-y-1.5 text-xs text-slate-300">
+                        ${entry.items.map(it => `<li class="flex items-start gap-2">
+                            <span class="shrink-0 px-1.5 py-0.5 text-[10px] rounded border ${TYPE_COLORS[it.type] || 'bg-slate-800 text-slate-300 border-slate-700'}">${it.type}</span>
+                            <span class="pt-0.5">${it.text}</span>
+                        </li>`).join('')}
+                    </ul>
+                </div>`).join('<div class="border-t border-dark-border/60"></div>');
         }
 
         function renderLogs() {
