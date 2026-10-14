@@ -31,6 +31,7 @@ import os
 import re
 import ssl
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -196,8 +197,43 @@ def ssl_context():
     return ctx
 
 
+def fetch_missing_intermediate(host):
+    """網站換憑證、又漏送中繼憑證時，照憑證裡寫的「CA Issuers」網址把中繼憑證抓回來存到 scripts/certs/。
+    抓回來的憑證還是要能接到受信任的根憑證才會通過驗證，所以不會降低安全性。"""
+    import socket
+    from cryptography import x509
+    from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
+
+    # 先不驗證地拿到網站憑證，只為了讀出中繼憑證的下載網址
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    with socket.create_connection((host, 443), timeout=30) as sock:
+        with ctx.wrap_socket(sock, server_hostname=host) as tls:
+            leaf = x509.load_der_x509_certificate(tls.getpeercert(binary_form=True))
+
+    aia = leaf.extensions.get_extension_for_oid(ExtensionOID.AUTHORITY_INFORMATION_ACCESS).value
+    url = next(d.access_location.value for d in aia
+               if d.access_method == AuthorityInformationAccessOID.CA_ISSUERS)
+    with urllib.request.urlopen(url, timeout=60) as res:
+        raw = res.read()
+    pem = raw.decode() if raw.startswith(b"-----") else ssl.DER_cert_to_PEM_cert(raw)
+
+    name = re.sub(r"[^\w.-]", "_", os.path.basename(urllib.parse.urlparse(url).path)).rsplit(".", 1)[0]
+    with open(os.path.join(ROOT, "scripts", "certs", f"auto_{name}.pem"), "w") as f:
+        f.write(pem)
+    log("CERT", f"{host} 憑證缺中繼憑證，已自動從 {url} 補上")
+
+
 def download(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (bim-concrete-cost)"})
+    try:
+        with urllib.request.urlopen(req, timeout=60, context=ssl_context()) as res:
+            return res.read()
+    except urllib.error.URLError as e:
+        if not isinstance(e.reason, ssl.SSLCertVerificationError):
+            raise
+        fetch_missing_intermediate(urllib.parse.urlparse(url).hostname)
     with urllib.request.urlopen(req, timeout=60, context=ssl_context()) as res:
         return res.read()
 

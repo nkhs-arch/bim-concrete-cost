@@ -73,5 +73,5 @@ python scripts/export_offline.py
 | `data/carbon_cache.json` | 最近一次下載的碳排係數（自動維護） |
 | `scripts/build_data.py` | 主程式：讀體積、抓單價、算成本 |
 | `scripts/export_offline.py` | 匯出離線版 HTML |
-| `scripts/certs/` | 補上政府網站缺少的 TWCA 中繼憑證（主計總處換憑證時，把新的中繼憑證 .pem 放進來） |
+| `scripts/certs/` | 補上政府網站缺少的中繼憑證。網站換憑證時程式會自動下載新的中繼憑證存成 `auto_*.pem`，不用手動處理 |
 | `.github/workflows/bim_auto_cost.yml` | 自動排程設定 |
