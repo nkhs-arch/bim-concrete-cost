@@ -19,6 +19,7 @@ BIM 混凝土成本自動估算：把 Forma Takeoff 匯出的體積 × 最新單
 碳排（6D 永續，自動下載）：
   環境部「碳足跡排放係數」開放資料，取各強度「預拌混凝土」最新公告的係數（kgCO2e/m³）
   蘊含碳 = 體積 × 係數
+  鋼筋另取同規格（例如 SD420W）鋼筋最新公告的係數（kgCO2e/kg），× 含損耗的鋼筋重量
 
 自動維護（不要手動改）：
   versions.json      ← 偵測到 quantities 內容變動時，自動新增一個版本
@@ -64,6 +65,7 @@ CFP_URL = ("https://data.moenv.gov.tw/api/v2/cfp_p_02?api_key=4c89a32a-a214-461b
            "&limit=1000&offset={offset}&format=CSV")
 # 只取一般預拌混凝土，例如「預拌混凝土(280 kgf/cm2)」；水中、自充填、加飛灰爐石等特殊配比不算
 CFP_CONCRETE = re.compile(r"^預拌混凝土\((\d{2,3})\s*kgf/cm2\)$")
+CARBON_REBAR_KEY = "rebar"  # carbon_cache.json 裡放鋼筋係數的欄位，其他欄位都是混凝土強度
 
 DEFAULT_GRADE = "280"
 DEFAULT_REGION = "北區"
@@ -475,8 +477,8 @@ def rebar_summary(types, config, cache, month, previous, concrete_cost):
 
 # ---------- 碳排係數（環境部開放資料） ----------
 
-def fetch_carbon_factors():
-    """回傳 {強度: {"factor": kgCO2e/m³, "year": 公告年, "source": 公告單位}}。
+def fetch_carbon_factors(rebar_spec):
+    """回傳 ({強度: {"factor": kgCO2e/m³, "year": 公告年, "source": 公告單位}}, 鋼筋係數)。
     同一強度有多筆時取最新年份；同一年有多筆時取平均。"""
     rows, offset = [], 0
     while True:
@@ -502,26 +504,51 @@ def fetch_carbon_factors():
 
     if not found:
         raise ValueError("碳足跡係數檔裡找不到預拌混凝土")
-    return {g: {"factor": round(sum(f["values"]) / len(f["values"]), 1), "year": f["year"],
-                "source": "、".join(sorted(f["sources"]))}
-            for g, f in sorted(found.items(), key=lambda kv: int(kv[0]))}
+    concrete = {g: {"factor": round(sum(f["values"]) / len(f["values"]), 1), "year": f["year"],
+                    "source": "、".join(sorted(f["sources"]))}
+                for g, f in sorted(found.items(), key=lambda kv: int(kv[0]))}
+    return concrete, pick_rebar_factor(rows, rebar_spec)
 
 
-def load_carbon_factors():
+def pick_rebar_factor(rows, spec):
+    """鋼筋係數（kgCO2e/kg）：優先取品名含規格（例如 SD420W）的鋼筋，沒有才用不分型號的鋼筋。
+    取最新公告年份，同年多筆取平均；不鏽鋼等特殊鋼材不算。"""
+    rebar = [r for r in rows if "鋼筋" in r.get("name", "") and "不鏽鋼" not in r["name"]
+             and "kg" in r.get("unit", "")]
+    candidates = [r for r in rebar if spec in r["name"]] or rebar
+    if not candidates:
+        return None
+    year = max(int(r["announcementyear"]) for r in candidates)
+    latest = [r for r in candidates if int(r["announcementyear"]) == year]
+    return {
+        "factor": round(sum(float(r["coe"]) for r in latest) / len(latest), 3),
+        "name": "、".join(sorted({r["name"] for r in latest})),
+        "year": year,
+        "source": "、".join(sorted({r["departmentname"] for r in latest})),
+    }
+
+
+def load_carbon_factors(rebar_spec):
+    """回傳 (混凝土各強度係數, 鋼筋係數或 None)。"""
     try:
-        factors = fetch_carbon_factors()
+        factors, rebar = fetch_carbon_factors(rebar_spec)
         with open(CARBON_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(factors, f, ensure_ascii=False, indent=2)
+            json.dump({**factors, CARBON_REBAR_KEY: rebar}, f, ensure_ascii=False, indent=2)
     except Exception as e:
         if not os.path.exists(CARBON_CACHE_FILE):
             raise
         log("WARN", f"碳排係數下載失敗（{e}），改用上次的資料")
         with open(CARBON_CACHE_FILE, encoding="utf-8") as f:
             factors = json.load(f)
+        rebar = factors.pop(CARBON_REBAR_KEY, None)
     f280 = factors.get(DEFAULT_GRADE)
     if f280:
         log("CARBON", f"環境部碳足跡係數 280 kgf = {f280['factor']} kgCO2e/m³（{f280['year']} 年公告）")
-    return factors
+    if rebar:
+        log("CARBON", f"環境部碳足跡係數 {rebar['name']} = {rebar['factor']} kgCO2e/kg（{rebar['year']} 年公告）")
+    else:
+        log("WARN", "碳足跡係數檔裡找不到鋼筋，鋼筋碳排不計")
+    return factors, rebar
 
 
 def carbon_of(elements, factors):
@@ -580,7 +607,7 @@ def main():
     months = sorted(cache["index"])
     latest, previous = months[-1], months[-2]
     prices = prices_for(latest, cache)
-    carbon_factors = load_carbon_factors()
+    carbon_factors, rebar_carbon = load_carbon_factors((rebar_config or {}).get("price_spec", "SD420W"))
     log("PRICE", f"換算後 {latest} 單價：" + "、".join(f"{g} kgf NT$ {prices[g]:,}" for g in ("210", "280", "350") if g in prices))
 
     # 每個版本都用「目前單價」計算，版本之間才能公平比較
@@ -600,11 +627,15 @@ def main():
     # 鋼筋只算目前模型（舊版本的體積檔沒有「類型」欄）
     rebar = rebar_config and rebar_summary(types, rebar_config, cache, latest, previous,
                                            latest_version["cost_at_current_price"])
+    if rebar and rebar_carbon:
+        # 用含損耗的重量（實際採購量）；係數單位 kgCO2e/kg，所以 公噸 × 係數 = 公噸 CO2e
+        rebar["carbon"] = {**rebar_carbon, "tco2e": round(rebar["gross_weight_t"] * rebar_carbon["factor"], 1)}
 
     log("SUCCESS", f"{latest_version['version']} 總體積 {latest_version['total_volume']:,.2f} m³，"
                    f"混凝土成本 NT$ {latest_version['cost_at_current_price']:,}，"
                    + (f"混凝土＋鋼筋 NT$ {rebar['total_cost']:,}，" if rebar else "")
-                   + f"蘊含碳 {latest_version['carbon_tco2e']:,.1f} tCO2e")
+                   + f"混凝土蘊含碳 {latest_version['carbon_tco2e']:,.1f} tCO2e"
+                   + (f"，鋼筋蘊含碳 {rebar['carbon']['tco2e']:,.1f} tCO2e" if rebar and rebar.get("carbon") else ""))
 
     output = {
         "generated_at": datetime.now(TW).strftime("%Y-%m-%d %H:%M"),

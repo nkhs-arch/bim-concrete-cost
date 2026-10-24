@@ -262,16 +262,16 @@
             <div class="flex flex-wrap gap-2 items-start justify-between mb-4">
                 <div>
                     <h3 class="text-sm font-semibold text-white flex items-center">
-                        <i class="fa-solid fa-leaf mr-2 text-emerald-400"></i>6D 永續：混凝土蘊含碳排放
+                        <i class="fa-solid fa-leaf mr-2 text-emerald-400"></i>6D 永續：<span id="carbon-title">混凝土</span>蘊含碳排放
                     </h3>
-                    <p class="text-xs text-slate-400">體積 × 環境部碳足跡排放係數，評估方式參照建研所《低碳（低蘊含碳）建築評估手冊》（LEBR）</p>
+                    <p class="text-xs text-slate-400">數量 × 環境部碳足跡排放係數，評估方式參照建研所《低碳（低蘊含碳）建築評估手冊》（LEBR）</p>
                 </div>
                 <span class="text-xs font-mono text-slate-400" id="carbon-version">--</span>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="bg-dark-bg border border-dark-border rounded-xl p-4 flex flex-col justify-center">
-                    <span class="text-xs text-slate-400">混凝土蘊含碳總量</span>
+                    <span class="text-xs text-slate-400" id="carbon-total-label">混凝土蘊含碳總量</span>
                     <div class="flex items-baseline space-x-2 mt-1">
                         <span class="text-3xl font-bold font-mono text-emerald-400" id="carbon-total">--</span>
                         <span class="text-xs text-slate-400">公噸 CO₂e</span>
@@ -284,8 +284,8 @@
                         <thead>
                             <tr class="bg-dark-bg text-slate-400 border-b border-dark-border">
                                 <th class="p-2.5 rounded-l">構件</th>
-                                <th class="p-2.5 text-right">體積 (m³)</th>
-                                <th class="p-2.5 text-right">係數 (kgCO₂e/m³)</th>
+                                <th class="p-2.5 text-right">數量</th>
+                                <th class="p-2.5 text-right">係數 (kgCO₂e)</th>
                                 <th class="p-2.5 text-right rounded-r">碳排 (公噸 CO₂e)</th>
                             </tr>
                         </thead>
@@ -295,7 +295,7 @@
             </div>
 
             <p class="mt-4 pt-3 border-t border-dark-border text-xs text-slate-400">
-                * 係數：<span id="carbon-note">--</span>。目前只算混凝土材料，尚未含鋼筋、模板與施工機具的碳排。
+                * 係數：<span id="carbon-note">--</span>。<span id="carbon-scope">目前只算混凝土材料，尚未含鋼筋、模板與施工機具的碳排。</span>
             </p>
         </div>
 
@@ -640,29 +640,49 @@
             if (!factors) return;  // 舊版 data.json 沒有碳排資料
             document.getElementById('carbon-section').classList.remove('hidden');
             const factorFor = el => factors[el.grade] ?? factors['280'];
+            const t1 = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+            // 鋼筋只有目前模型有（V1 沒有類型資料）
+            const isLatest = v === data.versions[data.versions.length - 1];
+            const rc = isLatest ? data.rebar?.carbon : null;
+            const total = v.carbon_tco2e + (rc ? rc.tco2e : 0);
 
             document.getElementById('carbon-version').innerText = v.version;
-            document.getElementById('carbon-total').innerText = v.carbon_tco2e.toLocaleString('en-US', { minimumFractionDigits: 1 });
-            document.getElementById('carbon-equiv').innerText =
-                `平均每 m³ 混凝土 ${Math.round(v.carbon_tco2e * 1000 / v.total_volume)} kgCO₂e`;
+            document.getElementById('carbon-title').innerText = rc ? '混凝土＋鋼筋' : '混凝土';
+            document.getElementById('carbon-total-label').innerText = rc ? '蘊含碳總量（混凝土＋鋼筋）' : '混凝土蘊含碳總量';
+            document.getElementById('carbon-total').innerText = t1(total);
+            document.getElementById('carbon-equiv').innerText = rc
+                ? `混凝土 ${t1(v.carbon_tco2e)}（${(v.carbon_tco2e / total * 100).toFixed(0)}%）＋ 鋼筋 ${t1(rc.tco2e)}（${(rc.tco2e / total * 100).toFixed(0)}%）`
+                : `平均每 m³ 混凝土 ${Math.round(v.carbon_tco2e * 1000 / v.total_volume)} kgCO₂e`;
 
+            const rebarRow = rc ? `<tr class="hover:bg-dark-hover transition">
+                    <td class="p-2.5 font-medium text-white">鋼筋（含損耗）</td>
+                    <td class="p-2.5 text-right text-orange-400">${t1(data.rebar.gross_weight_t)} t</td>
+                    <td class="p-2.5 text-right">${rc.factor} /kg</td>
+                    <td class="p-2.5 text-right text-emerald-400 font-semibold">${t1(rc.tco2e)}</td>
+                </tr>` : '';
             document.getElementById('carbon-table-body').innerHTML = keys.map(k => {
                 const el = v.elements[k];
                 const f = factorFor(el).factor;
                 return `<tr class="hover:bg-dark-hover transition">
                     <td class="p-2.5 font-medium text-white">${ELEMENT_NAMES[k].split(' (')[1].replace(')', '')}（${el.grade} kgf）</td>
-                    <td class="p-2.5 text-right text-cyan-400">${el.volume.toFixed(2)}</td>
-                    <td class="p-2.5 text-right">${f}</td>
+                    <td class="p-2.5 text-right text-cyan-400">${el.volume.toFixed(2)} m³</td>
+                    <td class="p-2.5 text-right">${f} /m³</td>
                     <td class="p-2.5 text-right text-emerald-400 font-semibold">${(el.volume * f / 1000).toFixed(1)}</td>
                 </tr>`;
-            }).join('');
+            }).join('') + rebarRow;
+
+            document.getElementById('carbon-scope').innerText = rc
+                ? `鋼筋以含 ${Math.round(data.rebar.loss_rate * 100)}% 損耗搭接的採購量計算。含混凝土與鋼筋，尚未含模板與施工機具。`
+                : (data.rebar ? '此版本沒有鋼筋資料（舊模型無類型資料），只算混凝土。' : '目前只算混凝土材料，尚未含鋼筋、模板與施工機具的碳排。');
 
             const used = [...new Set(keys.map(k => v.elements[k].grade))].map(g => {
                 const f = factors[g] ?? factors['280'];
                 return `${factors[g] ? g : '280'} kgf ${f.factor}（${f.source}，${f.year} 年公告）`;
             });
             document.getElementById('carbon-note').innerText =
-                `環境部「碳足跡排放係數」開放資料，預拌混凝土 ${used.join('；')}`;
+                `環境部「碳足跡排放係數」開放資料，預拌混凝土 ${used.join('；')}`
+                + (rc ? `；${rc.name} ${rc.factor} kgCO₂e/kg（${rc.source}，${rc.year} 年公告）` : '');
         }
 
         function renderRebar() {
