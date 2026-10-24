@@ -164,7 +164,7 @@
 
             <div class="bg-dark-card border border-dark-border rounded-xl p-4">
                 <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
-                    <span>動態總估算成本</span>
+                    <span id="kpi-cost-label">動態總估算成本</span>
                     <i class="fa-solid fa-coins text-amber-400"></i>
                 </div>
                 <div class="flex items-baseline justify-between">
@@ -175,7 +175,7 @@
 
             <div class="bg-dark-card border border-dark-border rounded-xl p-4">
                 <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
-                    <span>本月成本變動（單價影響）</span>
+                    <span id="kpi-price-effect-label">本月成本變動（單價影響）</span>
                     <i class="fa-solid fa-tag text-emerald-400"></i>
                 </div>
                 <div class="flex items-baseline justify-between">
@@ -217,9 +217,9 @@
                 <div class="flex flex-wrap gap-2 items-center justify-between mb-4">
                     <div>
                         <h3 class="text-sm font-semibold text-white flex items-center">
-                            <i class="fa-solid fa-chart-column mr-2 text-emerald-400"></i>跨版本算量與總成本比較
+                            <i class="fa-solid fa-chart-column mr-2 text-emerald-400"></i>跨版本算量與混凝土成本比較
                         </h3>
-                        <p class="text-xs text-slate-400">各版本皆以最新單價計算，方便公平比較</p>
+                        <p class="text-xs text-slate-400">各版本皆以最新單價計算，方便公平比較；只算混凝土（V1 沒有鋼筋資料）</p>
                     </div>
                     <div class="flex items-center space-x-1 bg-dark-bg p-1 rounded-lg border border-dark-border" id="version-buttons"></div>
                 </div>
@@ -229,13 +229,13 @@
                 </div>
                 <div class="flex justify-between text-[11px] font-mono mt-1">
                     <span class="text-cyan-400">體積 (m³)</span>
-                    <span class="text-amber-400">金額 (萬元)</span>
+                    <span class="text-amber-400">混凝土金額 (萬元)</span>
                 </div>
 
                 <div class="mt-4 pt-3 border-t border-dark-border flex items-center justify-between text-xs text-slate-400">
                     <div class="flex items-center space-x-4">
                         <span class="flex items-center"><span class="w-3 h-3 bg-cyan-500 rounded mr-1.5"></span> 混凝土體積 (m³)</span>
-                        <span class="flex items-center"><span class="w-3 h-3 bg-amber-500 rounded mr-1.5"></span> 總造價 (NT$)</span>
+                        <span class="flex items-center"><span class="w-3 h-3 bg-amber-500 rounded mr-1.5"></span> 混凝土造價 (NT$)</span>
                     </div>
                     <span class="font-mono text-[11px] text-slate-400"><i class="fa-solid fa-circle-info mr-1"></i>點版本按鈕切換明細</span>
                 </div>
@@ -247,9 +247,9 @@
             <div class="flex items-center justify-between mb-4">
                 <div>
                     <h3 class="text-sm font-semibold text-white flex items-center">
-                        <i class="fa-solid fa-chart-line mr-2 text-amber-400"></i>近 12 個月成本走勢（目前模型 × 每月單價）
+                        <i class="fa-solid fa-chart-line mr-2 text-amber-400"></i>近 12 個月混凝土成本走勢（目前模型 × 每月單價）
                     </h3>
-                    <p class="text-xs text-slate-400">體積固定為目前版本，只看單價漲跌對總成本的影響</p>
+                    <p class="text-xs text-slate-400">體積固定為目前版本，只看混凝土單價漲跌對混凝土成本的影響（不含鋼筋）</p>
                 </div>
             </div>
             <div class="relative h-56">
@@ -359,7 +359,7 @@
                 <div>
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-sm font-semibold text-white flex items-center">
-                            <i class="fa-solid fa-table-list mr-2 text-blue-400"></i>Forma Takeoff 體積與單價計算明細
+                            <i class="fa-solid fa-table-list mr-2 text-blue-400"></i>混凝土體積與單價計算明細
                         </h3>
                         <span class="text-xs font-mono text-slate-400" id="table-version">--</span>
                     </div>
@@ -492,7 +492,11 @@
                 const el = latest.elements[k];
                 return acc + el.volume * (priceFor(el, p) - priceFor(el, prev));
             }, 0);
-            document.getElementById('kpi-price-effect').innerHTML = diffSpan(effect, nt);
+            // 鋼筋：含損耗重量 × 單價差
+            const r = data.rebar;
+            const rebarEffect = r && r.previous_price ? r.gross_weight_t * (r.price - r.previous_price) : 0;
+            if (r) document.getElementById('kpi-price-effect-label').innerText = '本月成本變動（混凝土＋鋼筋單價）';
+            document.getElementById('kpi-price-effect').innerHTML = diffSpan(effect + rebarEffect, nt);
         }
 
         function initCharts() {
@@ -515,7 +519,7 @@
                     datasets: [
                         { label: '混凝土總體積 (m³)', data: data.versions.map(v => v.total_volume), backgroundColor: 'rgba(6, 182, 212, 0.6)', borderColor: '#06b6d4', borderWidth: 1, yAxisID: 'y', order: 1 },
                         // order 較小的畫在上層，折線才不會被半透明長條蓋成綠色
-                        { label: '總造價 (NT$)', data: data.versions.map(v => v.cost_at_current_price), type: 'line', borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderWidth: 2, pointRadius: 4, yAxisID: 'y1', order: 0 }
+                        { label: '混凝土造價 (NT$)', data: data.versions.map(v => v.cost_at_current_price), type: 'line', borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderWidth: 2, pointRadius: 4, yAxisID: 'y1', order: 0 }
                     ]
                 },
                 options: {
@@ -534,7 +538,7 @@
                 data: {
                     labels: data.cost_history.map(c => c.month),
                     datasets: [{
-                        label: '總成本 (NT$)',
+                        label: '混凝土成本 (NT$)',
                         data: data.cost_history.map(c => c.cost),
                         borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.12)', fill: true,
                         borderWidth: 2, pointRadius: 3, tension: 0.2
@@ -579,13 +583,21 @@
             document.getElementById('table-version').innerText = v.version;
 
             document.getElementById('kpi-volume').innerText = v.total_volume.toLocaleString('en-US', { minimumFractionDigits: 2 });
-            document.getElementById('kpi-cost').innerText = nt(v.cost_at_current_price);
+            // 鋼筋只有目前模型有（舊版本的體積檔沒有類型資料）
+            const rebar = i === data.versions.length - 1 ? data.rebar : null;
+            document.getElementById('kpi-cost-label').innerText = rebar ? '動態總估算成本（混凝土＋鋼筋）' : '動態總估算成本（混凝土）';
+            document.getElementById('kpi-cost').innerText = nt(v.cost_at_current_price + (rebar ? rebar.cost : 0));
+            const costParts = rebar
+                ? `混凝土 ${nt(v.cost_at_current_price)} ＋ 鋼筋 ${nt(rebar.cost)}`
+                : (data.rebar ? '未含鋼筋（舊模型無類型資料）' : '');
             document.getElementById('kpi-volume-diff').innerHTML = prev
                 ? `${diffSpan(v.total_volume - prev.total_volume, n => n.toFixed(1) + ' m³')} 較 ${prev.version} 增減`
                 : '基準版本';
-            document.getElementById('kpi-cost-diff').innerHTML = prev
-                ? `${diffSpan(v.cost_at_current_price - prev.cost_at_current_price, nt)} 較 ${prev.version} 變動`
+            // 版本比較只比混凝土，V1 沒有鋼筋，不能拿含鋼筋的總額去比
+            const costDiff = prev
+                ? `混凝土較 ${prev.version} 變動 ${diffSpan(v.cost_at_current_price - prev.cost_at_current_price, nt)}`
                 : '基準版本';
+            document.getElementById('kpi-cost-diff').innerHTML = costParts ? `${costParts}<br>${costDiff}` : costDiff;
 
             const keys = ORDER.filter(k => v.elements[k]);
             document.getElementById('kpi-elements').innerText = v.element_count;
@@ -618,7 +630,7 @@
                     <td class="p-2.5 text-right text-emerald-400 font-semibold">${nt(subtotal)}</td>
                 </tr>`;
             }).join('');
-            document.getElementById('table-total-sum').innerText = `合計: ${nt(sum)}`;
+            document.getElementById('table-total-sum').innerText = `混凝土合計: ${nt(sum)}`;
 
             renderCarbon(v, keys);
         }

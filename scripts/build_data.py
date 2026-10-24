@@ -437,11 +437,12 @@ def rebar_of(types, config):
     return rows
 
 
-def rebar_summary(types, config, cache, month, concrete_cost):
+def rebar_summary(types, config, cache, month, previous, concrete_cost):
     rows = rebar_of(types, config)
     net = sum(r["weight_t"] for r in rows)
     gross = net * (1 + config["loss_rate"])
     price, official = rebar_price_for(month, cache, config["fallback_price"])
+    previous_price, _ = rebar_price_for(previous, cache, config["fallback_price"])
     cost = round(gross * price)
     rc = cache.get("rebar", {})
     index = rc.get("index", {})
@@ -454,6 +455,7 @@ def rebar_summary(types, config, cache, month, concrete_cost):
         "loss_note": config.get("loss_note", ""),
         "gross_weight_t": round(gross, 1),
         "price": price,
+        "previous_price": previous_price,  # 上個月單價，網頁算「本月成本變動」用
         "is_official": official,
         "price_month": month if official else None,
         "base_period": rc.get("base_period") if official else None,
@@ -596,12 +598,13 @@ def main():
     ]
 
     # 鋼筋只算目前模型（舊版本的體積檔沒有「類型」欄）
-    rebar = rebar_config and rebar_summary(types, rebar_config, cache, latest,
+    rebar = rebar_config and rebar_summary(types, rebar_config, cache, latest, previous,
                                            latest_version["cost_at_current_price"])
 
     log("SUCCESS", f"{latest_version['version']} 總體積 {latest_version['total_volume']:,.2f} m³，"
-                   f"總成本 NT$ {latest_version['cost_at_current_price']:,}，"
-                   f"蘊含碳 {latest_version['carbon_tco2e']:,.1f} tCO2e")
+                   f"混凝土成本 NT$ {latest_version['cost_at_current_price']:,}，"
+                   + (f"混凝土＋鋼筋 NT$ {rebar['total_cost']:,}，" if rebar else "")
+                   + f"蘊含碳 {latest_version['carbon_tco2e']:,.1f} tCO2e")
 
     output = {
         "generated_at": datetime.now(TW).strftime("%Y-%m-%d %H:%M"),
