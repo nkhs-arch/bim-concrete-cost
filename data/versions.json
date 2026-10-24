@@ -26,5 +26,33 @@
         "spec": "280 kgf/cm² 預拌混凝土"
       }
     }
+  },
+  {
+    "version": "V2",
+    "model_name": "TSB-XXX-ZZ-XX-M3-S-0001.rvt",
+    "note": "第二版（方案 G）",
+    "author": "Zzzero",
+    "detected_at": "2026-10-24",
+    "hash": "ab1fd256e495",
+    "elements": {
+      "beams": {
+        "volume": 1549.48,
+        "count": 756,
+        "grade": "280",
+        "spec": "280 kgf/cm² 預拌混凝土"
+      },
+      "columns": {
+        "volume": 660.13,
+        "count": 435,
+        "grade": "280",
+        "spec": "280 kgf/cm² 預拌混凝土"
+      },
+      "floors": {
+        "volume": 2117.16,
+        "count": 398,
+        "grade": "280",
+        "spec": "280 kgf/cm² 預拌混凝土"
+      }
+    }
   }
 ]

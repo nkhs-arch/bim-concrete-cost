@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-19 10:41",
+  "generated_at": "2026-10-24 14:03",
   "is_sample": false,
   "region": "北區",
   "price_month": "2026-09",
@@ -58,56 +58,88 @@
       "element_count": 1699,
       "cost_at_current_price": 14484122,
       "carbon_tco2e": 1508.7
+    },
+    {
+      "version": "V2",
+      "model_name": "TSB-XXX-ZZ-XX-M3-S-0001.rvt",
+      "note": "第二版（方案 G）",
+      "author": "Zzzero",
+      "detected_at": "2026-10-24",
+      "hash": "ab1fd256e495",
+      "elements": {
+        "beams": {
+          "volume": 1549.48,
+          "count": 756,
+          "grade": "280",
+          "spec": "280 kgf/cm² 預拌混凝土"
+        },
+        "columns": {
+          "volume": 660.13,
+          "count": 435,
+          "grade": "280",
+          "spec": "280 kgf/cm² 預拌混凝土"
+        },
+        "floors": {
+          "volume": 2117.16,
+          "count": 398,
+          "grade": "280",
+          "spec": "280 kgf/cm² 預拌混凝土"
+        }
+      },
+      "total_volume": 4326.77,
+      "element_count": 1589,
+      "cost_at_current_price": 14040369,
+      "carbon_tco2e": 1462.4
     }
   ],
   "cost_history": [
     {
       "month": "2025-10",
-      "cost": 14591247
+      "cost": 14144211
     },
     {
       "month": "2025-11",
-      "cost": 14591247
+      "cost": 14144211
     },
     {
       "month": "2025-12",
-      "cost": 14586783
+      "cost": 14139884
     },
     {
       "month": "2026-01",
-      "cost": 14577856
+      "cost": 14131231
     },
     {
       "month": "2026-02",
-      "cost": 14573393
+      "cost": 14126904
     },
     {
       "month": "2026-03",
-      "cost": 14582320
+      "cost": 14135558
     },
     {
       "month": "2026-04",
-      "cost": 14551075
+      "cost": 14105270
     },
     {
       "month": "2026-05",
-      "cost": 14551075
+      "cost": 14105270
     },
     {
       "month": "2026-06",
-      "cost": 14551075
+      "cost": 14105270
     },
     {
       "month": "2026-07",
-      "cost": 14524294
+      "cost": 14079310
     },
     {
       "month": "2026-08",
-      "cost": 14515367
+      "cost": 14070656
     },
     {
       "month": "2026-09",
-      "cost": 14484122
+      "cost": 14040369
     }
   ],
   "carbon_factors": {
@@ -147,7 +179,158 @@
       "source": "公路總局西部濱海公路南區臨時工程處"
     }
   },
+  "rebar": {
+    "rows": [
+      {
+        "category": "beams",
+        "type": "50X250",
+        "count": 162,
+        "volume": 863.44,
+        "ratio": 91.9,
+        "weight_t": 79.35
+      },
+      {
+        "category": "beams",
+        "type": "35X75",
+        "count": 72,
+        "volume": 80.92,
+        "ratio": 165.0,
+        "weight_t": 13.35
+      },
+      {
+        "category": "beams",
+        "type": "45X75",
+        "count": 126,
+        "volume": 179.21,
+        "ratio": 165.0,
+        "weight_t": 29.57
+      },
+      {
+        "category": "beams",
+        "type": "35X70",
+        "count": 72,
+        "volume": 75.52,
+        "ratio": 176.8,
+        "weight_t": 13.35
+      },
+      {
+        "category": "beams",
+        "type": "45X70",
+        "count": 90,
+        "volume": 120.49,
+        "ratio": 176.8,
+        "weight_t": 21.3
+      },
+      {
+        "category": "beams",
+        "type": "35X50",
+        "count": 96,
+        "volume": 72.02,
+        "ratio": 200.4,
+        "weight_t": 14.43
+      },
+      {
+        "category": "beams",
+        "type": "45X60",
+        "count": 138,
+        "volume": 157.88,
+        "ratio": 200.4,
+        "weight_t": 31.64
+      },
+      {
+        "category": "columns",
+        "type": "50X50",
+        "count": 197,
+        "volume": 179.76,
+        "ratio": 209.7,
+        "weight_t": 37.7
+      },
+      {
+        "category": "columns",
+        "type": "75X75",
+        "count": 238,
+        "volume": 480.37,
+        "ratio": 188.5,
+        "weight_t": 90.55
+      },
+      {
+        "category": "floors",
+        "type": "30cm",
+        "count": 73,
+        "volume": 425.25,
+        "ratio": 70.6,
+        "weight_t": 30.02
+      },
+      {
+        "category": "floors",
+        "type": "50cm",
+        "count": 72,
+        "volume": 697.5,
+        "ratio": 95.8,
+        "weight_t": 66.82
+      },
+      {
+        "category": "floors",
+        "type": "20cm",
+        "count": 73,
+        "volume": 296.57,
+        "ratio": 106.5,
+        "weight_t": 31.58
+      },
+      {
+        "category": "floors",
+        "type": "25cm",
+        "count": 72,
+        "volume": 365.06,
+        "ratio": 85.2,
+        "weight_t": 31.1
+      },
+      {
+        "category": "floors",
+        "type": "15cm",
+        "count": 108,
+        "volume": 332.78,
+        "ratio": 142.2,
+        "weight_t": 47.32
+      }
+    ],
+    "net_weight_t": 538.1,
+    "loss_rate": 0.1,
+    "loss_note": "損耗＋搭接 10%（業界 #5 以下約 5%，#6 以上依號數增加；模型未畫搭接與加密區）",
+    "gross_weight_t": 591.9,
+    "price": 20045,
+    "is_official": true,
+    "price_month": "2026-09",
+    "base_period": "2026-04",
+    "base_price": 20000.0,
+    "base_index": 101.21,
+    "latest_index": 101.44,
+    "item": "產品，鋼筋，SD420W，熱軋，D32mm，工地交貨",
+    "source": "工程會「大宗資材之鋼筋價格調查」× 主計總處營造工程物價指數「金屬製品類」",
+    "price_note": "工程會調查沒有 #4、#6、#8（D13、D19、D25）品項，以最接近的 SD420W 最細規格估算；依工程會資料，各號數價差約 2%",
+    "assumption": "鋼筋比（kg/m³）來自練習配筋檔 S-0002 的配筋，不是正式結構設計。45X70 依梁深內插；35 寬梁沿用同梁深的 45 寬；梁深小於 60 cm 取 45X60；20、25 cm 樓板以 21.3 kg/m² 換算。",
+    "cost": 11864395,
+    "concrete_cost": 14040369,
+    "total_cost": 25904764
+  },
   "changelog": [
+    {
+      "date": "2026-10-24",
+      "items": [
+        {
+          "type": "資料",
+          "text": "換上第二版結構模型 TSB-XXX-ZZ-XX-M3-S-0001.rvt（方案 G）的 Revit 明細表體積，共 4,326.77 m³（梁 1,549.48、柱 660.13、板 2,117.16）"
+        },
+        {
+          "type": "新功能",
+          "text": "新增「鋼筋重量與成本」：各類型體積 × 鋼筋比（練習假設，來自練習配筋檔 S-0002）＋ 10% 損耗搭接"
+        },
+        {
+          "type": "新功能",
+          "text": "鋼筋單價採用政府開放資料：工程會「大宗資材之鋼筋價格調查」SD420W × 主計總處營造工程物價指數「金屬製品類」"
+        }
+      ]
+    },
     {
       "date": "2026-10-14",
       "items": [
@@ -210,44 +393,59 @@
   ],
   "logs": [
     {
-      "time": "10:40:34",
+      "time": "14:03:14",
       "tag": "INFO",
-      "msg": "開始估算（2026-10-19）"
+      "msg": "開始估算（2026-10-24）"
     },
     {
-      "time": "10:40:34",
+      "time": "14:03:14",
       "tag": "TAKEOFF",
-      "msg": "讀取 quantities.xlsx：3 類構件，總體積 4,463.52 m³"
+      "msg": "讀取 quantities.csv：3 類構件，總體積 4,326.77 m³"
     },
     {
-      "time": "10:40:34",
+      "time": "14:03:14",
       "tag": "MODEL",
-      "msg": "體積檔案沒有變動，沿用 V1"
+      "msg": "體積檔案沒有變動，沿用 V2"
     },
     {
-      "time": "10:41:34",
-      "tag": "WARN",
-      "msg": "工程會價格下載失敗（<urlopen error timed out>），改用上次的資料"
+      "time": "14:03:14",
+      "tag": "PRICE",
+      "msg": "工程會基準價（2026-04・北區）280 kgf = NT$ 3,260"
     },
     {
-      "time": "10:41:37",
+      "time": "14:03:14",
+      "tag": "REBAR",
+      "msg": "工程會鋼筋基準價（2026-04・北區）產品，鋼筋，SD420W，熱軋，D32mm，工地交貨 = NT$ 20,000 / T"
+    },
+    {
+      "time": "14:03:16",
       "tag": "PRICE",
       "msg": "主計總處水泥類指數 最新 2026-09 = 123.0"
     },
     {
-      "time": "10:41:39",
+      "time": "14:03:16",
+      "tag": "REBAR",
+      "msg": "主計總處金屬製品類指數 最新 2026-09 = 101.44"
+    },
+    {
+      "time": "14:03:16",
       "tag": "CARBON",
       "msg": "環境部碳足跡係數 280 kgf = 338.0 kgCO2e/m³（2020 年公告）"
     },
     {
-      "time": "10:41:39",
+      "time": "14:03:16",
       "tag": "PRICE",
       "msg": "換算後 2026-09 單價：210 kgf NT$ 3,049、280 kgf NT$ 3,245、350 kgf NT$ 3,411"
     },
     {
-      "time": "10:41:39",
+      "time": "14:03:16",
+      "tag": "REBAR",
+      "msg": "鋼筋 538.1 t，含損耗 10% 為 591.9 t，× NT$ 20,045 / T = NT$ 11,864,395"
+    },
+    {
+      "time": "14:03:16",
       "tag": "SUCCESS",
-      "msg": "V1 總體積 4,463.52 m³，總成本 NT$ 14,484,122，蘊含碳 1,508.7 tCO2e"
+      "msg": "V2 總體積 4,326.77 m³，總成本 NT$ 14,040,369，蘊含碳 1,462.4 tCO2e"
     }
   ]
 }

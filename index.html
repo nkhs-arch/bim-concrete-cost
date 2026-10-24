@@ -295,7 +295,62 @@
             </div>
 
             <p class="mt-4 pt-3 border-t border-dark-border text-xs text-slate-400">
-                * 係數：<span id="carbon-note">--</span>。目前只算混凝土材料，尚未含鋼筋、模板與施工機具；鋼筋重量完成後再加入。
+                * 係數：<span id="carbon-note">--</span>。目前只算混凝土材料，尚未含鋼筋、模板與施工機具的碳排。
+            </p>
+        </div>
+
+        <!-- 鋼筋重量與成本 -->
+        <div id="rebar-section" class="hidden bg-dark-card border border-dark-border rounded-xl p-5">
+            <div class="flex flex-wrap gap-2 items-start justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-white flex items-center">
+                        <i class="fa-solid fa-bars-staggered mr-2 text-orange-400"></i>鋼筋重量與成本
+                        <span class="ml-2 px-1.5 py-0.5 text-[10px] bg-amber-950 text-amber-400 border border-amber-800 rounded">練習假設</span>
+                    </h3>
+                    <p class="text-xs text-slate-400">各類型體積 × 鋼筋比（kg/m³）＋ 損耗搭接，再 × 工程會鋼筋單價</p>
+                </div>
+                <span class="text-xs font-mono text-slate-400" id="rebar-version">--</span>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="space-y-3">
+                    <div class="bg-dark-bg border border-dark-border rounded-xl p-4">
+                        <span class="text-xs text-slate-400">鋼筋總重（含損耗）</span>
+                        <div class="flex items-baseline space-x-2 mt-1">
+                            <span class="text-3xl font-bold font-mono text-orange-400" id="rebar-gross">--</span>
+                            <span class="text-xs text-slate-400">公噸</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-2" id="rebar-net"></p>
+                    </div>
+                    <div class="bg-dark-bg border border-dark-border rounded-xl p-4 text-xs font-mono space-y-2">
+                        <div class="flex justify-between"><span class="text-slate-400">鋼筋單價</span><span class="text-white" id="rebar-price">--</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">鋼筋成本</span><span class="text-orange-400 font-semibold" id="rebar-cost">--</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">混凝土成本</span><span class="text-cyan-400" id="rebar-concrete-cost">--</span></div>
+                        <div class="flex justify-between pt-2 border-t border-dark-border"><span class="text-slate-300">混凝土＋鋼筋</span><span class="text-emerald-400 font-bold" id="rebar-total-cost">--</span></div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead>
+                            <tr class="bg-dark-bg text-slate-400 border-b border-dark-border">
+                                <th class="p-2.5 rounded-l">構件</th>
+                                <th class="p-2.5">類型</th>
+                                <th class="p-2.5 text-right">個數</th>
+                                <th class="p-2.5 text-right">體積 (m³)</th>
+                                <th class="p-2.5 text-right">鋼筋比 (kg/m³)</th>
+                                <th class="p-2.5 text-right rounded-r">重量 (公噸)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-dark-border/60 text-slate-200" id="rebar-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <p class="mt-4 pt-3 border-t border-dark-border text-xs text-slate-400 space-y-1">
+                <span class="block">* 練習假設：<span id="rebar-assumption">--</span></span>
+                <span class="block">* 損耗：<span id="rebar-loss-note">--</span></span>
+                <span class="block">* 單價：<span id="rebar-price-note">--</span></span>
             </p>
         </div>
 
@@ -374,7 +429,7 @@
         const COLORS = { floors: '#06b6d4', columns: '#3b82f6', beams: '#10b981', walls: '#f59e0b' };
         const ORDER = ['floors', 'columns', 'beams', 'walls'];
 
-        const TAG_COLORS = { INFO: 'text-blue-400', TAKEOFF: 'text-amber-400', MODEL: 'text-cyan-400', PRICE: 'text-purple-400', CARBON: 'text-emerald-400', CERT: 'text-amber-400', SUCCESS: 'text-emerald-400' };
+        const TAG_COLORS = { INFO: 'text-blue-400', TAKEOFF: 'text-amber-400', MODEL: 'text-cyan-400', PRICE: 'text-purple-400', CARBON: 'text-emerald-400', REBAR: 'text-orange-400', WARN: 'text-rose-400', CERT: 'text-amber-400', SUCCESS: 'text-emerald-400' };
 
         let data, volumePieChart, versionTrendChart, costHistoryChart;
 
@@ -410,6 +465,7 @@
             initCharts();
             renderVersionButtons();
             showVersion(data.versions.length - 1);
+            renderRebar();
             renderLogs();
             renderChangelog();
         }
@@ -595,6 +651,38 @@
             });
             document.getElementById('carbon-note').innerText =
                 `環境部「碳足跡排放係數」開放資料，預拌混凝土 ${used.join('；')}`;
+        }
+
+        function renderRebar() {
+            const r = data.rebar;
+            if (!r) return;  // 舊版 data.json 沒有鋼筋資料
+            document.getElementById('rebar-section').classList.remove('hidden');
+            const t = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+            // 鋼筋只算目前模型（舊版本的體積檔沒有類型資料）
+            document.getElementById('rebar-version').innerText = `目前模型 ${data.versions[data.versions.length - 1].version}`;
+            document.getElementById('rebar-gross').innerText = t(r.gross_weight_t);
+            document.getElementById('rebar-net').innerText =
+                `未含損耗 ${t(r.net_weight_t)} 公噸 + 損耗搭接 ${Math.round(r.loss_rate * 100)}%`;
+            document.getElementById('rebar-price').innerText = `${nt(r.price)} / T`;
+            document.getElementById('rebar-cost').innerText = nt(r.cost);
+            document.getElementById('rebar-concrete-cost').innerText = nt(r.concrete_cost);
+            document.getElementById('rebar-total-cost').innerText = nt(r.total_cost);
+
+            document.getElementById('rebar-table-body').innerHTML = r.rows.map(row => `<tr class="hover:bg-dark-hover transition">
+                    <td class="p-2.5 font-medium text-white">${ELEMENT_NAMES[row.category].split(' (')[1].replace(')', '')}</td>
+                    <td class="p-2.5 text-slate-400">${row.type || '--'}</td>
+                    <td class="p-2.5 text-right">${row.count}</td>
+                    <td class="p-2.5 text-right text-cyan-400">${row.volume.toFixed(2)}</td>
+                    <td class="p-2.5 text-right ${row.ratio ? '' : 'text-rose-400'}">${row.ratio ? row.ratio.toFixed(1) : '缺資料'}</td>
+                    <td class="p-2.5 text-right text-orange-400 font-semibold">${row.weight_t.toFixed(1)}</td>
+                </tr>`).join('');
+
+            document.getElementById('rebar-assumption').innerText = r.assumption;
+            document.getElementById('rebar-loss-note').innerText = r.loss_note;
+            document.getElementById('rebar-price-note').innerText = r.is_official
+                ? `${r.source}（${r.item}，${data.region} ${r.base_period} 調查 NT$ ${r.base_price.toLocaleString('en-US')} / T；指數 ${r.base_period}：${r.base_index} → ${r.price_month}：${r.latest_index}）${r.price_note ? '。' + r.price_note : ''}`
+                : r.source;
         }
 
         function renderChangelog() {

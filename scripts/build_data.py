@@ -2,14 +2,19 @@
 BIM 混凝土成本自動估算：把 Forma Takeoff 匯出的體積 × 最新單價，產生網頁用的 data.json。
 
 輸入（都在 data/ 資料夾）：
-  quantities.xlsx 或 quantities.csv  ← 從 Forma Takeoff 匯出，模型改版時覆蓋這一份就好
+  quantities.xlsx 或 quantities.csv  ← Forma Takeoff 匯出或 Revit 明細表，模型改版時覆蓋這一份就好
   model_info.json                    ← 模型名稱、備註、工地區域、各構件混凝土強度
-  changelog.json                     ← 網站更新日誌（手動維護，新的寫在最上面）
+  rebar.json                         ← 各類型構件的鋼筋比（kg/m³，練習假設）、損耗率
+  changelog.json                    ← 網站更新日誌（手動維護，新的寫在最上面）
 
 單價（自動下載，皆為政府開放資料）：
   基準價：公共工程委員會「大宗資材之混凝土價格調查」各強度、各區域單價
   調整：  主計總處「營造工程物價指數」水泥及其製品類指數，每月更新
   最新單價 = 基準價 × 最新月份指數 ÷ 基準價月份指數
+
+鋼筋（練習假設）：
+  鋼筋重量 = 各類型體積 × 鋼筋比，再加損耗＋搭接
+  單價 = 工程會「大宗資材之鋼筋價格調查」基準價 × 主計總處「金屬製品類」指數調整
 
 碳排（6D 永續，自動下載）：
   環境部「碳足跡排放係數」開放資料，取各強度「預拌混凝土」最新公告的係數（kgCO2e/m³）
@@ -48,10 +53,12 @@ CARBON_CACHE_FILE = os.path.join(DATA_DIR, "carbon_cache.json")
 
 TW = timezone(timedelta(hours=8))
 
-PCC_PRICE_URL = ("https://pcic.pcc.gov.tw/pwc-web/api/service/opendata-file/document/"
-                 + urllib.parse.quote("預拌混凝土.csv"))
+PCC_FILE_URL = "https://pcic.pcc.gov.tw/pwc-web/api/service/opendata-file/document/"
+PCC_PRICE_URL = PCC_FILE_URL + urllib.parse.quote("預拌混凝土.csv")
+PCC_REBAR_URL = PCC_FILE_URL + urllib.parse.quote("鋼筋.csv")  # data.gov.tw/dataset/6820
 DGBAS_INDEX_URL = "https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230553/pr0501a1m.xml"
 INDEX_ITEM = "水泥及其製品類"
+REBAR_INDEX_ITEM = "金屬製品類"
 # api_key 是政府資料開放平臺（data.gov.tw/dataset/28176）公開提供的下載金鑰
 CFP_URL = ("https://data.moenv.gov.tw/api/v2/cfp_p_02?api_key=4c89a32a-a214-461b-bf29-30ff32a61a8a"
            "&limit=1000&offset={offset}&format=CSV")
@@ -69,6 +76,7 @@ COLUMN_ALIASES = {
     "volume": ["體積 (M3)", "體積", "體積(m3)", "體積 (m³)", "Volume (M3)", "Volume"],
     "count": ["個數", "Count"],  # Takeoff 詳細資料一列就是一個構件，沒有這欄時每列算 1 個
     "item": ["行項名稱", "Item name"],  # 只取「體積」這個行項，避免日後加了面積等行項被加進來
+    "type": ["類型", "族群與類型", "Type"],  # 例如 45X75、30cm，用來對照鋼筋比
 }
 VOLUME_ITEMS = {"體積", "volume"}
 
@@ -98,6 +106,14 @@ def load_model_info():
     path = os.path.join(DATA_DIR, "model_info.json")
     if not os.path.exists(path):
         return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_rebar_config():
+    path = os.path.join(DATA_DIR, "rebar.json")
+    if not os.path.exists(path):
+        return None
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
@@ -148,6 +164,12 @@ def parse_grade(text):
     return m.group(1) if m else None
 
 
+def normalize_type(text):
+    """「45 x 75」「45×75」都當成 45X75；「30 CM」當成 30cm。"""
+    text = re.sub(r"\s+", "", text or "").upper().replace("×", "X")
+    return re.sub(r"CM$", "cm", text)
+
+
 def to_number(value):
     return float(re.sub(r"[^\d.\-]", "", value or "0") or 0)
 
@@ -163,7 +185,7 @@ def load_quantities(grades):
     with open(path, "rb") as f:
         digest = hashlib.sha256(f.read()).hexdigest()[:12]
 
-    elements = {}
+    elements, types = {}, {}
     for row in read_table(path):
         item = pick(row, "item")
         if item and item.strip().lower() not in VOLUME_ITEMS:
@@ -178,14 +200,20 @@ def load_quantities(grades):
             "volume": 0.0, "count": 0, "grade": grade,
             "spec": spec or f"{grade} kgf/cm² 預拌混凝土",
         })
-        el["volume"] += to_number(pick(row, "volume"))
-        el["count"] += int(to_number(pick(row, "count") or "1"))
+        volume = to_number(pick(row, "volume"))
+        count = int(to_number(pick(row, "count") or "1"))
+        el["volume"] += volume
+        el["count"] += count
+        # 同一類型分布在不同樓層，合併成一列，之後用來對照鋼筋比
+        t = types.setdefault((key, normalize_type(pick(row, "type"))), {"volume": 0.0, "count": 0})
+        t["volume"] += volume
+        t["count"] += count
 
     for el in elements.values():
         el["volume"] = round(el["volume"], 2)
 
     log("TAKEOFF", f"讀取 {name}：{len(elements)} 類構件，總體積 {sum(e['volume'] for e in elements.values()):,.2f} m³")
-    return digest, elements
+    return digest, elements, types
 
 
 # ---------- 單價（政府開放資料） ----------
@@ -253,15 +281,19 @@ def roc_to_month(roc):
     return f"{int(roc[:-2]) + 1911}-{roc[-2:]}"
 
 
-def fetch_base_prices(region):
-    """工程會預拌混凝土價格調查：回傳 (基準月份, {強度: 單價})，只取最新一期、指定區域。"""
-    raw = download(PCC_PRICE_URL)
+def decode_csv(raw):
+    # 工程會的檔案有時是 UTF-8、有時是 Big5
     for enc in ("utf-8-sig", "big5"):
         try:
-            text = raw.decode(enc)
-            break
+            return raw.decode(enc)
         except UnicodeDecodeError:
             continue
+    raise ValueError("無法辨識 CSV 編碼")
+
+
+def fetch_base_prices(region):
+    """工程會預拌混凝土價格調查：回傳 (基準月份, {強度: 單價})，只取最新一期、指定區域。"""
+    text = decode_csv(download(PCC_PRICE_URL))
 
     by_period = {}
     for row in csv.DictReader(io.StringIO(text)):
@@ -278,23 +310,46 @@ def fetch_base_prices(region):
     return period, by_period[period]
 
 
-def fetch_cement_index():
-    """主計總處營造工程物價指數：回傳 {"2026-08": 123.24, ...}（水泥及其製品類、原始值）。"""
-    root = ET.fromstring(download(DGBAS_INDEX_URL))
-    series = {}
-    for obs in root.iter("Obs"):
-        if INDEX_ITEM not in (obs.findtext("Item") or "") or obs.findtext("TYPE") != "原始值":
+def fetch_rebar_base_price(region, spec):
+    """工程會鋼筋價格調查（元/T）：回傳 (基準月份, 調查項目, 單價)，只取最新一期、指定區域。
+    同一規格有好幾種直徑時取最細的，比較接近梁柱常用的竹節鋼筋。"""
+    text = decode_csv(download(PCC_REBAR_URL))
+
+    found = []
+    for row in csv.DictReader(io.StringIO(text)):
+        item = row.get("調查項目", "")
+        price = (row.get(region) or "").strip()
+        m = re.search(r"D(\d+)mm", item)
+        if f"，{spec}，" not in item or not price or not m:
             continue
+        found.append((roc_to_month(row["調查時間"]), -int(m.group(1)), item, to_number(price)))
+
+    if not found:
+        raise ValueError(f"鋼筋價格檔裡找不到「{region}」的 {spec}")
+    period, _, item, price = max(found)
+    return period, item, price
+
+
+def fetch_price_indices():
+    """主計總處營造工程物價指數：回傳 {類別: {"2026-08": 123.24, ...}}（水泥及其製品類、金屬製品類，原始值）。"""
+    root = ET.fromstring(download(DGBAS_INDEX_URL))
+    indices = {INDEX_ITEM: {}, REBAR_INDEX_ITEM: {}}
+    for obs in root.iter("Obs"):
+        if obs.findtext("TYPE") != "原始值":
+            continue
+        item = obs.findtext("Item") or ""
         value = (obs.findtext("Item_VALUE") or "").strip()
-        if value:
-            y, m = obs.findtext("TIME_PERIOD").split("M")
-            series[f"{y}-{m}"] = float(value)
-    if not series:
-        raise ValueError(f"物價指數檔裡找不到「{INDEX_ITEM}」")
-    return series
+        for name, series in indices.items():
+            if name in item and value:
+                y, m = obs.findtext("TIME_PERIOD").split("M")
+                series[f"{y}-{m}"] = float(value)
+    for name, series in indices.items():
+        if not series:
+            raise ValueError(f"物價指數檔裡找不到「{name}」")
+    return indices
 
 
-def load_price_data(region):
+def load_price_data(region, rebar_spec):
     cache = {}
     if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE, encoding="utf-8") as f:
@@ -309,11 +364,27 @@ def load_price_data(region):
             raise
         log("WARN", f"工程會價格下載失敗（{e}），改用上次的資料")
 
+    rebar = cache.setdefault("rebar", {})
     try:
-        index = fetch_cement_index()
+        period, item, price = fetch_rebar_base_price(region, rebar_spec)
+        log("REBAR", f"工程會鋼筋基準價（{period}・{region}）{item} = NT$ {price:,.0f} / T")
+        rebar.update({"region": region, "base_period": period, "item": item, "base_price": price})
+    except Exception as e:
+        # 鋼筋單價抓不到不中斷，混凝土照常計算
+        if rebar.get("region") == region and "base_price" in rebar:
+            log("WARN", f"工程會鋼筋價格下載失敗（{e}），改用上次的資料")
+        else:
+            rebar.pop("base_price", None)
+            log("WARN", f"工程會鋼筋價格下載失敗（{e}），也沒有快取，改用 rebar.json 的參考價")
+
+    try:
+        indices = fetch_price_indices()
+        index = indices[INDEX_ITEM]
         latest = max(index)
         log("PRICE", f"主計總處水泥類指數 最新 {latest} = {index[latest]}")
+        log("REBAR", f"主計總處金屬製品類指數 最新 {latest} = {indices[REBAR_INDEX_ITEM].get(latest)}")
         cache["index"] = index
+        rebar["index"] = indices[REBAR_INDEX_ITEM]
     except Exception as e:
         if "index" not in cache:
             raise
@@ -335,6 +406,69 @@ def prices_for(month, cache):
 def cost_of(elements, prices):
     fallback = prices.get(DEFAULT_GRADE) or next(iter(prices.values()))
     return sum(el["volume"] * prices.get(el["grade"], fallback) for el in elements.values())
+
+
+# ---------- 鋼筋（練習假設） ----------
+
+def rebar_price_for(month, cache, fallback_price):
+    """回傳 (元/T, 是否為政府資料)。鋼筋基準價依金屬製品類指數換算到指定月份。"""
+    rebar = cache.get("rebar", {})
+    if "base_price" not in rebar:
+        return fallback_price, False
+    index = rebar.get("index", {})
+    base_idx = index.get(rebar["base_period"])
+    ratio = index[month] / base_idx if base_idx and month in index else 1.0
+    return round(rebar["base_price"] * ratio), True
+
+
+def rebar_of(types, config):
+    """各類型體積 × 鋼筋比，回傳每列明細（重量單位：公噸，未含損耗）。"""
+    rows = []
+    for (key, type_name), t in types.items():
+        ratio = config["ratios"].get(key, {}).get(type_name)
+        if ratio is None:
+            log("WARN", f"rebar.json 沒有 {key} {type_name or '（無類型）'} 的鋼筋比，這列鋼筋以 0 計")
+            ratio = 0
+        rows.append({
+            "category": key, "type": type_name, "count": t["count"],
+            "volume": round(t["volume"], 2), "ratio": ratio,
+            "weight_t": round(t["volume"] * ratio / 1000, 2),
+        })
+    return rows
+
+
+def rebar_summary(types, config, cache, month, concrete_cost):
+    rows = rebar_of(types, config)
+    net = sum(r["weight_t"] for r in rows)
+    gross = net * (1 + config["loss_rate"])
+    price, official = rebar_price_for(month, cache, config["fallback_price"])
+    cost = round(gross * price)
+    rc = cache.get("rebar", {})
+    index = rc.get("index", {})
+    log("REBAR", f"鋼筋 {net:,.1f} t，含損耗 {config['loss_rate']:.0%} 為 {gross:,.1f} t，"
+                 f"× NT$ {price:,} / T = NT$ {cost:,}")
+    return {
+        "rows": rows,
+        "net_weight_t": round(net, 1),
+        "loss_rate": config["loss_rate"],
+        "loss_note": config.get("loss_note", ""),
+        "gross_weight_t": round(gross, 1),
+        "price": price,
+        "is_official": official,
+        "price_month": month if official else None,
+        "base_period": rc.get("base_period") if official else None,
+        "base_price": rc.get("base_price") if official else None,
+        "base_index": index.get(rc.get("base_period")) if official else None,
+        "latest_index": index.get(month) if official else None,
+        "item": rc.get("item") if official else None,
+        "source": ("工程會「大宗資材之鋼筋價格調查」× 主計總處營造工程物價指數「金屬製品類」"
+                   if official else "參考市場行情，非政府資料"),
+        "price_note": config.get("price_note", "") if official else "",
+        "assumption": config.get("_說明", ""),
+        "cost": cost,
+        "concrete_cost": concrete_cost,
+        "total_cost": concrete_cost + cost,
+    }
 
 
 # ---------- 碳排係數（環境部開放資料） ----------
@@ -436,10 +570,11 @@ def main():
     region = info.get("region", DEFAULT_REGION)
     log("INFO", f"開始估算（{date}）")
 
-    digest, elements = load_quantities(info.get("grades", {}))
+    digest, elements, types = load_quantities(info.get("grades", {}))
     versions = update_versions(date, digest, elements, info)
+    rebar_config = load_rebar_config()
 
-    cache = load_price_data(region)
+    cache = load_price_data(region, (rebar_config or {}).get("price_spec", "SD420W"))
     months = sorted(cache["index"])
     latest, previous = months[-1], months[-2]
     prices = prices_for(latest, cache)
@@ -460,6 +595,10 @@ def main():
         for m in months[-HISTORY_MONTHS:]
     ]
 
+    # 鋼筋只算目前模型（舊版本的體積檔沒有「類型」欄）
+    rebar = rebar_config and rebar_summary(types, rebar_config, cache, latest,
+                                           latest_version["cost_at_current_price"])
+
     log("SUCCESS", f"{latest_version['version']} 總體積 {latest_version['total_volume']:,.2f} m³，"
                    f"總成本 NT$ {latest_version['cost_at_current_price']:,}，"
                    f"蘊含碳 {latest_version['carbon_tco2e']:,.1f} tCO2e")
@@ -477,6 +616,7 @@ def main():
         "versions": versions,
         "cost_history": cost_history,
         "carbon_factors": carbon_factors,
+        "rebar": rebar,
         "changelog": load_changelog(),
         "logs": logs,
     }
