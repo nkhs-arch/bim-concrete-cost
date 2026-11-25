@@ -56,7 +56,12 @@
                 </div>
             </div>
 
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button id="project-switch" onclick="goHome()" class="hidden items-center space-x-2 bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-300 text-xs px-3 py-2 rounded-lg border border-cyan-800 transition max-w-[12rem]" title="回主畫面切換專案">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <span id="project-current" class="truncate font-medium">--</span>
+                    <i class="fa-solid fa-right-left text-[10px] opacity-70"></i>
+                </button>
                 <div class="hidden md:flex items-center space-x-2 text-xs font-mono bg-dark-bg px-3 py-1.5 rounded-lg border border-dark-border">
                     <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span class="text-slate-400">最後更新:</span>
@@ -71,7 +76,55 @@
         </div>
     </header>
 
-    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <!-- 主畫面：先建立或選擇專案 -->
+    <section id="home" class="hidden flex-grow max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+        <div class="text-center space-y-2">
+            <h2 class="text-2xl sm:text-3xl font-bold text-white">選擇要開啟的專案</h2>
+            <p class="text-sm text-slate-400">建立新專案並放入體積檔，或打開已經有的專案，就會看到它的成本、鋼筋與碳排儀表板。</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+            <!-- 建立新專案 -->
+            <form id="new-project-form" class="md:col-span-2 bg-dark-card border border-dark-border rounded-xl p-5 space-y-4" autocomplete="off">
+                <h3 class="text-sm font-semibold text-white flex items-center">
+                    <i class="fa-solid fa-folder-plus mr-2 text-emerald-400"></i>建立新專案
+                </h3>
+                <label class="block text-xs text-slate-400 space-y-1">
+                    <span>專案名稱</span>
+                    <input id="new-project-name" type="text" maxlength="40" placeholder="例如：圖書館新建工程" class="w-full bg-dark-bg border border-dark-border focus:border-emerald-500 outline-none rounded-lg px-3 py-2 text-sm text-white">
+                </label>
+                <div class="text-xs text-slate-400 space-y-1">
+                    <span>體積檔（Forma Takeoff Excel 或 Revit 明細表 CSV）</span>
+                    <label id="new-project-drop" for="new-project-file" class="block cursor-pointer border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-lg px-3 py-4 text-center transition">
+                        <i class="fa-solid fa-file-excel text-emerald-400 text-lg mb-1 block"></i>
+                        <span id="new-project-file-hint">把 .xlsx / .csv 拖到這裡，或點一下選擇檔案</span>
+                        <input id="new-project-file" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+                    </label>
+                </div>
+                <div id="new-project-error" class="hidden bg-rose-950/60 border border-rose-800 text-rose-300 text-xs rounded-lg p-3"></div>
+                <button type="submit" id="new-project-submit" class="w-full bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-medium text-sm py-2.5 rounded-lg shadow-lg transition active:scale-95">
+                    <i class="fa-solid fa-plus mr-1"></i>建立並開啟
+                </button>
+            </form>
+
+            <!-- 已經有的專案 -->
+            <div class="md:col-span-3 bg-dark-card border border-dark-border rounded-xl p-5 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                    <h3 class="text-sm font-semibold text-white flex items-center">
+                        <i class="fa-solid fa-folder-tree mr-2 text-cyan-400"></i>已經有的專案
+                    </h3>
+                    <div class="flex gap-2 text-[11px]">
+                        <button id="projects-export" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg transition" title="把你建立的專案存成檔案，帶到別台電腦"><i class="fa-solid fa-file-export mr-1"></i>匯出</button>
+                        <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg transition" title="讀入別台電腦匯出的專案檔"><i class="fa-solid fa-file-import mr-1"></i>匯入<input id="projects-import" type="file" accept=".json" class="hidden"></label>
+                    </div>
+                </div>
+                <div id="project-list" class="space-y-3"></div>
+                <p class="text-[11px] text-slate-500">* 你建立的專案存在這台電腦的瀏覽器裡（換電腦或清除瀏覽器資料就看不到），要帶走請按「匯出」。「選手大樓」是網站的正式資料，大家看到的都一樣。</p>
+            </div>
+        </div>
+    </section>
+
+    <main id="dashboard" class="hidden flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
         <div id="load-error" class="hidden bg-rose-950/60 border border-rose-800 text-rose-300 text-sm rounded-xl p-4"></div>
 
@@ -82,7 +135,7 @@
                     <h3 class="text-sm font-semibold text-white flex items-center">
                         <i class="fa-solid fa-file-arrow-up mr-2 text-emerald-400"></i>放入新的體積檔
                     </h3>
-                    <p class="text-xs text-slate-400 mt-1">Forma Takeoff 匯出的 Excel，或 Revit 明細表 CSV。放進來就用最新單價重算整頁（只在你的瀏覽器裡預覽）。</p>
+                    <p id="upload-desc" class="text-xs text-slate-400 mt-1">Forma Takeoff 匯出的 Excel，或 Revit 明細表 CSV。放進來就用最新單價重算整頁（只在你的瀏覽器裡預覽）。</p>
                 </div>
                 <label id="upload-drop" for="upload-input" class="flex-1 cursor-pointer border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-lg px-4 py-4 text-center text-xs text-slate-400 transition">
                     <i class="fa-solid fa-file-excel text-emerald-400 text-lg mb-1 block"></i>
@@ -95,10 +148,10 @@
                 <div id="upload-summary"></div>
                 <div class="flex flex-wrap gap-2">
                     <button id="upload-download" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-download mr-1"></i>下載 quantities.csv</button>
-                    <a id="upload-github" href="#" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-brands fa-github mr-1"></i>上傳到 GitHub 存成新版本</a>
-                    <button onclick="location.reload()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-rotate-left mr-1"></i>還原網站資料</button>
+                    <a id="upload-github" data-official href="#" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-brands fa-github mr-1"></i>上傳到 GitHub 存成新版本</a>
+                    <button data-official onclick="location.reload()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-rotate-left mr-1"></i>還原網站資料</button>
                 </div>
-                <p class="text-[11px] text-emerald-300/80">要讓大家都看到：按「下載 quantities.csv」，再到 GitHub 的 data 資料夾上傳覆蓋同名檔案（data 裡如果有 quantities.xlsx 要刪掉），約 1 分鐘後網站會自動建立新版本。</p>
+                <p data-official class="text-[11px] text-emerald-300/80">要讓大家都看到：按「下載 quantities.csv」，再到 GitHub 的 data 資料夾上傳覆蓋同名檔案（data 裡如果有 quantities.xlsx 要刪掉），約 1 分鐘後網站會自動建立新版本。</p>
             </div>
         </div>
 
@@ -487,6 +540,16 @@
             }
 
             setupUpload();
+            setupHome();
+            // 網址後面有 #project=… 就直接開那個專案（重新整理不會跳回主畫面），否則先顯示主畫面
+            const id = new URLSearchParams(location.hash.slice(1)).get('project');
+            if (id && (id === BUILTIN.id || findProject(id))) await openProject(id);
+            else showHome();
+            // 主畫面跟專案之間切換一律重新載入，避免上一個專案的資料殘留
+            window.addEventListener('hashchange', () => location.reload());
+        }
+
+        async function renderDashboard() {
             renderHeader();
             // 等字型載入完再畫圖，否則圖表用預設字型量寬度，換字型後刻度會壓到軸標題
             await document.fonts.ready;
@@ -860,7 +923,7 @@
                 t.count += count;
                 // 下載用：同一類別、樓層、類型合併成一列，格式跟 Revit 明細表一樣
                 const level = pick(row, 'level') || '';
-                const line = lines[[category, level, type].join('|')] ??= { category, level, type, count: 0, volume: 0 };
+                const line = lines[[category, level, type].join('|')] ??= { category, level, type, spec, count: 0, volume: 0 };
                 line.count += count;
                 line.volume += volume;
             }
@@ -895,10 +958,26 @@
             errBox.classList.add('hidden');
             document.getElementById('upload-hint').innerText = `讀取中：${file.name}…`;
             try {
-                const [table, calc] = await Promise.all([readTable(file), loadCalcConfig()]);
-                const { elements, types, lines } = parseQuantities(table, calc.grades || {});
-                applyUpload(file, elements, types, calc);
-                uploaded = { name: file.name, lines };
+                const { elements, types, lines, calc, saved } = await readQuantityFile(file);
+                if (currentProject) {
+                    // 自建專案：存成新版本
+                    currentProject.versions.push(saved);
+                    try { saveProject(currentProject); }
+                    catch (err) { currentProject.versions.pop(); throw err; }
+                    applyProject(currentProject, calc);
+                    const v = data.versions[data.versions.length - 1];
+                    const pv = data.versions[data.versions.length - 2];
+                    document.getElementById('upload-summary').innerHTML =
+                        `<i class="fa-solid fa-circle-check mr-1"></i>已把 <strong>${esc(file.name)}</strong> 存成「${esc(currentProject.name)}」的 ${v.version}：總體積 ${v.total_volume.toLocaleString('en-US')} m³，`
+                        + `混凝土成本 ${nt(v.cost_at_current_price)}` + (pv ? `（較 ${pv.version} ${diffSpan(v.cost_at_current_price - pv.cost_at_current_price, nt)}）` : '')
+                        + (data.rebar ? `，混凝土＋鋼筋 ${nt(data.rebar.total_cost)}` : '，此檔沒有類型欄，不算鋼筋') + '。';
+                    document.getElementById('upload-result').classList.remove('hidden');
+                    document.getElementById('upload-desc').innerText =
+                        `放入這個專案新版本的體積檔，會存成 V${currentProject.versions.length + 1}（存在這台電腦的瀏覽器）。`;
+                } else {
+                    applyUpload(file, elements, types, calc);
+                    uploaded = { name: file.name, lines };
+                }
                 rerender();
                 document.getElementById('upload-hint').innerText = `已載入：${file.name}（可再放入其他檔案）`;
             } catch (e) {
@@ -908,55 +987,71 @@
             }
         }
 
-        function applyUpload(file, elements, types, calc) {
-            const now = new Date();
-            const time = now.toTimeString().slice(0, 8);
-            const logs = [];
-            const log = (tag, msg) => logs.push({ time, tag, msg: esc(msg) });
-
-            // 只保留網站上的正式版本，重複上傳時取代上一次的預覽
-            data.versions = data.versions.filter(v => !v.is_upload);
-            const official = data.versions[data.versions.length - 1];
-            const v = {
-                version: '預覽', is_upload: true, model_name: file.name, note: '上傳檔案', author: '',
-                detected_at: now.toLocaleDateString('sv-SE'), elements,
-            };
+        function makeVersion(elements, fields) {
+            const v = { author: '', ...fields, elements };
             v.total_volume = r2(Object.values(elements).reduce((s, e) => s + e.volume, 0));
             v.element_count = Object.values(elements).reduce((s, e) => s + e.count, 0);
             v.cost_at_current_price = Math.round(costOf(elements, data.prices));
             v.carbon_tco2e = Math.round(carbonOf(elements) * 10) / 10;
+            return v;
+        }
+
+        function costHistoryFor(elements, calc) {
+            const months = Object.keys(calc.index).sort().slice(-12);
+            return months.map(m => ({ month: m, cost: Math.round(costOf(elements, pricesFor(m, calc))) }));
+        }
+
+        // 鋼筋：要有「類型」欄才能對照鋼筋比；單價、損耗沿用網站正式資料
+        function rebarFor(types, concreteCost, calc, log) {
+            const base = data.rebar_official;
+            if (!base) return null;
+            if (!types.some(t => t.type)) {
+                log('WARN', '這個體積檔沒有「類型」欄，無法對照鋼筋比，只算混凝土');
+                return null;
+            }
+            const rows = types.map(t => {
+                let ratio = calc.rebar_ratios[t.key]?.[t.type];
+                if (ratio == null) {
+                    log('WARN', `rebar.json 沒有 ${t.key} ${t.type || '（無類型）'} 的鋼筋比，這列鋼筋以 0 計`);
+                    ratio = 0;
+                }
+                return { category: t.key, type: esc(t.type), count: t.count, volume: r2(t.volume), ratio, weight_t: r2(t.volume * ratio / 1000) };
+            });
+            const net = rows.reduce((s, r) => s + r.weight_t, 0);
+            const gross = net * (1 + base.loss_rate);
+            const cost = Math.round(gross * base.price);
+            log('REBAR', `鋼筋 ${net.toFixed(1)} t，含損耗 ${Math.round(base.loss_rate * 100)}% 為 ${gross.toFixed(1)} t，× ${nt(base.price)} / T = ${nt(cost)}`);
+            return {
+                ...base, rows, cost,
+                net_weight_t: Math.round(net * 10) / 10, gross_weight_t: Math.round(gross * 10) / 10,
+                concrete_cost: concreteCost, total_cost: concreteCost + cost,
+                carbon: base.carbon && { ...base.carbon, tco2e: Math.round(gross * base.carbon.factor * 10) / 10 },
+            };
+        }
+
+        function makeLogger() {
+            const time = new Date().toTimeString().slice(0, 8);
+            const logs = [];
+            return { logs, log: (tag, msg) => logs.push({ time, tag, msg: esc(msg) }) };
+        }
+
+        // 選手大樓（網站正式資料）裡上傳：只在瀏覽器預覽，不會存起來
+        function applyUpload(file, elements, types, calc) {
+            const { logs, log } = makeLogger();
+            data.rebar_official ??= data.rebar;
+
+            // 只保留網站上的正式版本，重複上傳時取代上一次的預覽
+            data.versions = data.versions.filter(v => !v.is_upload);
+            const official = data.versions[data.versions.length - 1];
+            const v = makeVersion(elements, {
+                version: '預覽', is_upload: true, model_name: file.name, note: '上傳檔案',
+                detected_at: new Date().toLocaleDateString('sv-SE'),
+            });
             data.versions.push(v);
             log('TAKEOFF', `讀取上傳檔 ${file.name}：${Object.keys(elements).length} 類構件，總體積 ${v.total_volume.toLocaleString('en-US', { minimumFractionDigits: 2 })} m³`);
 
-            const months = Object.keys(calc.index).sort().slice(-12);
-            data.cost_history = months.map(m => ({ month: m, cost: Math.round(costOf(elements, pricesFor(m, calc))) }));
-
-            // 鋼筋：要有「類型」欄才能對照鋼筋比
-            data.rebar = data.rebar_official ??= data.rebar;
-            const base = data.rebar_official;
-            if (base && types.some(t => t.type)) {
-                const rows = types.map(t => {
-                    let ratio = calc.rebar_ratios[t.key]?.[t.type];
-                    if (ratio == null) {
-                        log('WARN', `rebar.json 沒有 ${t.key} ${t.type || '（無類型）'} 的鋼筋比，這列鋼筋以 0 計`);
-                        ratio = 0;
-                    }
-                    return { category: t.key, type: esc(t.type), count: t.count, volume: r2(t.volume), ratio, weight_t: r2(t.volume * ratio / 1000) };
-                });
-                const net = rows.reduce((s, r) => s + r.weight_t, 0);
-                const gross = net * (1 + base.loss_rate);
-                const cost = Math.round(gross * base.price);
-                data.rebar = {
-                    ...base, rows, cost,
-                    net_weight_t: Math.round(net * 10) / 10, gross_weight_t: Math.round(gross * 10) / 10,
-                    concrete_cost: v.cost_at_current_price, total_cost: v.cost_at_current_price + cost,
-                    carbon: base.carbon && { ...base.carbon, tco2e: Math.round(gross * base.carbon.factor * 10) / 10 },
-                };
-                log('REBAR', `鋼筋 ${net.toFixed(1)} t，含損耗 ${Math.round(base.loss_rate * 100)}% 為 ${gross.toFixed(1)} t，× ${nt(base.price)} / T = ${nt(cost)}`);
-            } else {
-                data.rebar = null;
-                if (base) log('WARN', '上傳的檔案沒有「類型」欄，無法對照鋼筋比，只算混凝土');
-            }
+            data.cost_history = costHistoryFor(elements, calc);
+            data.rebar = rebarFor(types, v.cost_at_current_price, calc, log);
             log('SUCCESS', `預覽 總體積 ${v.total_volume.toLocaleString('en-US')} m³，混凝土成本 ${nt(v.cost_at_current_price)}`
                 + (data.rebar ? `，混凝土＋鋼筋 ${nt(data.rebar.total_cost)}` : ''));
             data.logs = [...(data.logs_official ??= data.logs), ...logs];
@@ -968,6 +1063,230 @@
                 + (data.rebar ? `，混凝土＋鋼筋 ${nt(data.rebar.total_cost)}` : '，此檔沒有類型欄，不算鋼筋')
                 + '。重新整理頁面就會回到網站資料。';
             document.getElementById('upload-result').classList.remove('hidden');
+        }
+
+        // ---------- 專案（主畫面）：自己建立的專案存在瀏覽器 localStorage ----------
+
+        const STORE_KEY = 'bim-projects-v1';
+        const BUILTIN = { id: 'builtin', name: '選手大樓' };
+        let currentProject = null;   // 目前開啟的自建專案（選手大樓時是 null）
+        let newProjectFile = null;   // 主畫面「建立新專案」選好的檔案
+
+        function loadProjects() {
+            try {
+                const list = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
+                return Array.isArray(list) ? list.filter(p => p && p.id && Array.isArray(p.versions)) : [];
+            } catch { return []; }
+        }
+        function saveProjects(list) {
+            try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; }
+            catch { return false; }
+        }
+        const findProject = id => loadProjects().find(p => p.id === id);
+        function saveProject(project) {
+            const list = loadProjects().filter(p => p.id !== project.id);
+            list.unshift(project);
+            if (!saveProjects(list)) throw new Error('瀏覽器不讓網站存資料（可能是無痕模式或空間已滿），專案沒有存起來');
+        }
+        const newId = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const today = () => new Date().toLocaleDateString('sv-SE');
+        const shortName = name => { const n = String(name).replace(/\.[^.]+$/, ''); return n.length > 14 ? n.slice(0, 13) + '…' : n; };
+
+        // 存起來的明細轉回表格，再用同一套規則算
+        const linesToTable = lines => lines.map(l => ({
+            '計量類型': l.category, '樓層': l.level, '類型': l.type, '材質': l.spec || '',
+            '個數': String(l.count), '體積 (M3)': String(l.volume),
+        }));
+
+        async function readQuantityFile(file) {
+            const [table, calc] = await Promise.all([readTable(file), loadCalcConfig()]);
+            const parsed = parseQuantities(table, calc.grades || {});
+            const total = r2(Object.values(parsed.elements).reduce((s, e) => s + e.volume, 0));
+            return { ...parsed, calc, saved: { file: file.name, date: today(), total_volume: total, lines: parsed.lines.map(l => ({ ...l, volume: r2(l.volume) })) } };
+        }
+
+        // 把自建專案的每個體積檔算成一個版本（V1、V2…），用網站最新單價
+        function applyProject(project, calc) {
+            const { logs, log } = makeLogger();
+            data.rebar_official ??= data.rebar;
+            let latestTypes = [];
+            data.versions = project.versions.map((pv, i) => {
+                const { elements, types } = parseQuantities(linesToTable(pv.lines), calc.grades || {});
+                latestTypes = types;
+                const v = makeVersion(elements, { version: 'V' + (i + 1), model_name: pv.file, note: shortName(pv.file), detected_at: pv.date });
+                log('TAKEOFF', `${v.version} ${pv.file}：${Object.keys(elements).length} 類構件，總體積 ${v.total_volume.toLocaleString('en-US', { minimumFractionDigits: 2 })} m³`);
+                return v;
+            });
+            const latest = data.versions[data.versions.length - 1];
+            log('PRICE', `單價：${data.region} ${data.price_month}，280 kgf ${nt(data.prices['280'])} / m³`);
+            data.cost_history = costHistoryFor(latest.elements, calc);
+            data.rebar = rebarFor(latestTypes, latest.cost_at_current_price, calc, log);
+            log('SUCCESS', `專案「${project.name}」${latest.version} 混凝土成本 ${nt(latest.cost_at_current_price)}`
+                + (data.rebar ? `，混凝土＋鋼筋 ${nt(data.rebar.total_cost)}` : ''));
+            data.logs = logs;
+            data.is_sample = false;
+            uploaded = { name: latest.model_name, lines: project.versions[project.versions.length - 1].lines };
+        }
+
+        async function openProject(id) {
+            const isBuiltin = id === BUILTIN.id;
+            currentProject = isBuiltin ? null : findProject(id);
+            if (!isBuiltin && !currentProject) return showHome();
+            if (location.hash.slice(1) !== 'project=' + id) history.replaceState(null, '', '#project=' + id);
+
+            const name = isBuiltin ? BUILTIN.name : currentProject.name;
+            document.title = `${name} - BIM 混凝土成本動態估算系統`;
+            document.getElementById('project-current').innerText = name;
+            document.getElementById('project-switch').classList.remove('hidden');
+            document.getElementById('project-switch').classList.add('flex');
+            document.querySelectorAll('[data-official]').forEach(el => el.classList.toggle('hidden', !isBuiltin));
+            document.getElementById('upload-desc').innerText = isBuiltin
+                ? 'Forma Takeoff 匯出的 Excel，或 Revit 明細表 CSV。放進來就用最新單價重算整頁（只在你的瀏覽器裡預覽）。'
+                : `放入這個專案新版本的體積檔，會存成 V${currentProject.versions.length + 1}（存在這台電腦的瀏覽器）。`;
+
+            document.getElementById('home').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+
+            if (!isBuiltin) {
+                try {
+                    applyProject(currentProject, await loadCalcConfig());
+                } catch (e) {
+                    const box = document.getElementById('load-error');
+                    box.classList.remove('hidden');
+                    box.innerText = '這個專案讀取失敗：' + e.message;
+                    return;
+                }
+            }
+            await renderDashboard();
+        }
+
+        function goHome() {
+            history.replaceState(null, '', location.pathname + location.search);
+            location.reload();
+        }
+
+        function showHome() {
+            document.title = 'BIM 混凝土成本動態估算系統';
+            document.getElementById('generated-at').innerText = data.generated_at;
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('home').classList.remove('hidden');
+            renderProjectList();
+        }
+
+        function projectCard({ id, name, tag, detail, deletable }) {
+            return `<div class="group flex items-center gap-3 bg-dark-bg border border-dark-border hover:border-cyan-600 rounded-lg p-3 transition">
+                <button onclick="openProject('${id}')" class="flex-1 min-w-0 flex items-center gap-3 text-left">
+                    <span class="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${deletable ? 'bg-emerald-950 text-emerald-400' : 'bg-cyan-950 text-cyan-400'}">
+                        <i class="fa-solid ${deletable ? 'fa-folder' : 'fa-building'}"></i>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="flex items-center gap-2">
+                            <span class="font-semibold text-white truncate">${esc(name)}</span>
+                            <span class="shrink-0 px-1.5 py-0.5 text-[10px] rounded border ${deletable ? 'bg-emerald-950 text-emerald-400 border-emerald-800' : 'bg-cyan-950 text-cyan-400 border-cyan-800'}">${tag}</span>
+                        </span>
+                        <span class="block text-[11px] text-slate-400 truncate">${detail}</span>
+                    </span>
+                </button>
+                ${deletable ? `<button onclick="deleteProject('${id}')" class="shrink-0 text-slate-500 hover:text-rose-400 px-2 py-1 transition" title="刪除專案"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+                <i class="fa-solid fa-chevron-right text-slate-600 group-hover:text-cyan-400 text-xs"></i>
+            </div>`;
+        }
+
+        function renderProjectList() {
+            const official = data.versions[data.versions.length - 1];
+            const cards = [projectCard({
+                id: BUILTIN.id, name: BUILTIN.name, tag: '網站正式資料',
+                detail: `${data.versions.length} 個版本 · 最新 ${official.version} ${official.total_volume.toLocaleString('en-US')} m³ · 更新 ${esc(data.generated_at)}`,
+            })];
+            for (const p of loadProjects()) {
+                const last = p.versions[p.versions.length - 1];
+                cards.push(projectCard({
+                    id: p.id, name: p.name, tag: '我的專案', deletable: true,
+                    detail: last
+                        ? `${p.versions.length} 個版本 · 最新 ${esc(last.file)}${last.total_volume != null ? ` ${last.total_volume.toLocaleString('en-US')} m³` : ''} · ${esc(last.date)}`
+                        : '還沒有體積檔',
+                }));
+            }
+            document.getElementById('project-list').innerHTML = cards.join('');
+        }
+
+        function deleteProject(id) {
+            const p = findProject(id);
+            if (!p || !confirm(`確定要刪除專案「${p.name}」嗎？刪除後無法復原（建議先按「匯出」備份）。`)) return;
+            saveProjects(loadProjects().filter(x => x.id !== id));
+            renderProjectList();
+        }
+
+        function setNewProjectFile(file) {
+            newProjectFile = file;
+            document.getElementById('new-project-file-hint').innerText = file ? `已選擇：${file.name}` : '把 .xlsx / .csv 拖到這裡，或點一下選擇檔案';
+        }
+
+        async function createProject(e) {
+            e.preventDefault();
+            const errBox = document.getElementById('new-project-error');
+            const btn = document.getElementById('new-project-submit');
+            const fail = msg => { errBox.innerText = msg; errBox.classList.remove('hidden'); };
+            errBox.classList.add('hidden');
+            const name = document.getElementById('new-project-name').value.trim();
+            if (!name) return fail('請輸入專案名稱');
+            if (name === BUILTIN.name || loadProjects().some(p => p.name === name)) return fail(`已經有叫「${name}」的專案，請換個名稱`);
+            if (!newProjectFile) return fail('請放入體積檔（.xlsx 或 .csv）');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>讀取中…';
+            try {
+                const { saved } = await readQuantityFile(newProjectFile);
+                const project = { id: newId(), name, created_at: today(), versions: [saved] };
+                saveProject(project);
+                await openProject(project.id);
+            } catch (err) {
+                fail('建立失敗：' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i>建立並開啟';
+            }
+        }
+
+        function exportProjects() {
+            const projects = loadProjects();
+            if (!projects.length) return alert('還沒有自己建立的專案可以匯出');
+            const blob = new Blob([JSON.stringify({ format: 'bim-concrete-cost-projects', exported_at: today(), projects }, null, 1)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `bim-projects-${today()}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        async function importProjects(file) {
+            try {
+                const json = JSON.parse(await file.text());
+                const incoming = (json.projects || []).filter(p => p && p.id && p.name && Array.isArray(p.versions));
+                if (!incoming.length) throw new Error('檔案裡沒有專案');
+                const ids = new Set(incoming.map(p => p.id));
+                if (!saveProjects([...incoming, ...loadProjects().filter(p => !ids.has(p.id))])) throw new Error('瀏覽器不讓網站存資料');
+                renderProjectList();
+                alert(`已匯入 ${incoming.length} 個專案`);
+            } catch (err) {
+                alert('匯入失敗：' + err.message);
+            }
+        }
+
+        function setupHome() {
+            document.getElementById('new-project-form').addEventListener('submit', createProject);
+            const input = document.getElementById('new-project-file');
+            const drop = document.getElementById('new-project-drop');
+            input.addEventListener('change', () => { if (input.files[0]) setNewProjectFile(input.files[0]); input.value = ''; });
+            drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('border-emerald-500'); });
+            drop.addEventListener('dragleave', () => drop.classList.remove('border-emerald-500'));
+            drop.addEventListener('drop', e => {
+                e.preventDefault();
+                drop.classList.remove('border-emerald-500');
+                if (e.dataTransfer.files[0]) setNewProjectFile(e.dataTransfer.files[0]);
+            });
+            document.getElementById('projects-export').addEventListener('click', exportProjects);
+            const imp = document.getElementById('projects-import');
+            imp.addEventListener('change', () => { if (imp.files[0]) importProjects(imp.files[0]); imp.value = ''; });
         }
 
         function rerender() {
