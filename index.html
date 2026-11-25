@@ -868,20 +868,28 @@
 
         const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
         const COLUMN_ALIASES = {
-            category: ['計量類型', '類別', '構件類別', 'Takeoff type', 'Category', 'Classification'],
-            spec: ['材質', '規格', '材料', 'Material'],
-            volume: ['體積 (M3)', '體積', '體積(m3)', '體積 (m³)', 'Volume (M3)', 'Volume'],
-            count: ['個數', 'Count'],
-            item: ['行項名稱', 'Item name'],
-            type: ['類型', '族群與類型', 'Type'],
-            level: ['樓層', '位置', 'Level'],
+            // 新版 Takeoff 有時匯出簡體欄位名稱，一併接受
+            category: ['計量類型', '類別', '構件類別', '计量类型', '类别', '构件类别', 'Takeoff type', 'Category', 'Classification'],
+            spec: ['材質', '規格', '材料', '材质', '规格', 'Material'],
+            volume: ['體積 (M3)', '體積', '體積(m3)', '體積 (m³)', '体积 (M3)', '体积', '体积(m3)', 'Volume (M3)', 'Volume'],
+            count: ['個數', '个数', 'Count'],
+            item: ['行項名稱', '行项名称', 'Item name'],
+            type: ['類型', '族群與類型', '类型', '族与类型', 'Type'],
+            level: ['樓層', '位置', '楼层', '标高', 'Level'],
         };
-        const VOLUME_ITEMS = ['體積', 'volume'];
+        const VOLUME_ITEMS = ['體積', '体积', 'volume'];
         const CATEGORY_KEYWORDS = {
-            floors: ['樓板', '板', 'floor', 'slab'],
+            floors: ['樓板', '楼板', '板', 'floor', 'slab'],
             columns: ['柱', 'column'],
-            beams: ['梁', '樑', 'framing', 'beam'],
-            walls: ['牆', 'wall'],
+            beams: ['梁', '樑', '構架', '构架', 'framing', 'beam'],
+            walls: ['牆', '墙', 'wall'],
+        };
+        // Takeoff「Inventory」摘要頁：名稱欄是「樓板 - 體積」這種行項，數量欄是體積
+        const SUMMARY_ALIASES = {
+            name: ['名稱', '名称', 'Name'],
+            quantity: ['數量', '数量', 'Quantity'],
+            count: ['實例', '实例', 'Instances', 'Count'],
+            unit: ['單位', '单位', 'Unit'],
         };
         let uploaded = null;  // 最近一次上傳的明細，給「下載 quantities.csv」用
 
@@ -907,7 +915,8 @@
             });
         }
 
-        async function readTable(file) {
+        // 回傳每一頁的表格，逐構件明細頁排最前面
+        async function readTables(file) {
             if (!window.XLSX) await loadScript(XLSX_URL);
             const buf = await file.arrayBuffer();
             let wb;
@@ -920,14 +929,41 @@
             } else {
                 wb = XLSX.read(buf, { type: 'array' });
             }
-            // Takeoff 匯出檔第一頁是摘要，逐構件明細在「詳細資料 - …」那一頁
-            const name = wb.SheetNames.find(n => n.startsWith('詳細資料') || n.startsWith('Details')) || wb.SheetNames[0];
-            const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: true })
-                .map(r => r.map(c => String(c ?? '').trim()))
-                .filter(r => r.some(c => c));
-            if (rows.length < 2) throw new Error('檔案裡沒有資料列');
-            const header = rows[0];
-            return rows.slice(1).map(r => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ''])));
+            // Takeoff 匯出檔第一頁是摘要，逐構件明細在「詳細資料 - …」（簡體版「详细信息 - …」）那一頁
+            const isDetail = n => /^(詳細資料|詳細資訊|详细信息|详细资料|Details)/i.test(n);
+            const names = [...wb.SheetNames.filter(isDetail), ...wb.SheetNames.filter(n => !isDetail(n))];
+            return names.map(name => {
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: true })
+                    .map(r => r.map(c => String(c ?? '').trim()))
+                    .filter(r => r.some(c => c));
+                if (rows.length < 2) return [];
+                const header = rows[0];
+                return rows.slice(1).map(r => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ''])));
+            }).filter(t => t.length);
+        }
+
+        // 摘要頁轉成一般明細格式：「樓板 - 體積」那列的數量就是樓板體積
+        function summaryToTable(table) {
+            const get = (row, f) => { for (const n of SUMMARY_ALIASES[f]) if (row[n] !== undefined && row[n] !== '') return row[n]; return null; };
+            const out = [];
+            for (const row of table) {
+                const m = String(get(row, 'name') || '').match(/^(.+?)\s*[-－–]\s*(體積|体积|volume)\s*$/i);
+                if (!m) continue;
+                const unit = String(get(row, 'unit') || '').toLowerCase();
+                if (unit && !/m3|m³|立方/.test(unit)) continue;
+                out.push({ '計量類型': m[1], '體積 (M3)': String(get(row, 'quantity') ?? '0'), '個數': String(get(row, 'count') ?? '0') });
+            }
+            return out;
+        }
+
+        // 先找逐構件明細，找不到再用摘要頁
+        function parseAnyQuantities(tables, grades) {
+            let lastError;
+            for (const t of [...tables, ...tables.map(summaryToTable)]) {
+                if (!t.length) continue;
+                try { return parseQuantities(t, grades); } catch (e) { lastError = e; }
+            }
+            throw lastError || new Error('檔案裡沒有資料列');
         }
 
         function parseQuantities(table, grades) {
@@ -1225,8 +1261,8 @@
         }));
 
         async function readQuantityFile(file) {
-            const [table, calc] = await Promise.all([readTable(file), loadCalcConfig()]);
-            const parsed = parseQuantities(table, calc.grades || {});
+            const [tables, calc] = await Promise.all([readTables(file), loadCalcConfig()]);
+            const parsed = parseAnyQuantities(tables, calc.grades || {});
             const total = r2(Object.values(parsed.elements).reduce((s, e) => s + e.volume, 0));
             return { ...parsed, calc, saved: { file: file.name, date: today(), total_volume: total, lines: parsed.lines.map(l => ({ ...l, volume: r2(l.volume) })) } };
         }

@@ -74,22 +74,31 @@ DEFAULT_REGION = "北區"
 HISTORY_MONTHS = 12
 
 # Takeoff 匯出的欄位名稱可能是中文或英文，這裡列出可接受的名稱
+# 新版 Takeoff 有時匯出簡體欄位名稱，一併接受（網頁 index.html 的上傳也用同一套規則）
 COLUMN_ALIASES = {
-    "category": ["計量類型", "類別", "構件類別", "Takeoff type", "Category", "Classification"],
-    "spec": ["材質", "規格", "材料", "Material"],
-    "volume": ["體積 (M3)", "體積", "體積(m3)", "體積 (m³)", "Volume (M3)", "Volume"],
-    "count": ["個數", "Count"],  # Takeoff 詳細資料一列就是一個構件，沒有這欄時每列算 1 個
-    "item": ["行項名稱", "Item name"],  # 只取「體積」這個行項，避免日後加了面積等行項被加進來
-    "type": ["類型", "族群與類型", "Type"],  # 例如 45X75、30cm，用來對照鋼筋比
+    "category": ["計量類型", "類別", "構件類別", "计量类型", "类别", "构件类别", "Takeoff type", "Category", "Classification"],
+    "spec": ["材質", "規格", "材料", "材质", "规格", "Material"],
+    "volume": ["體積 (M3)", "體積", "體積(m3)", "體積 (m³)", "体积 (M3)", "体积", "体积(m3)", "Volume (M3)", "Volume"],
+    "count": ["個數", "个数", "Count"],  # Takeoff 詳細資料一列就是一個構件，沒有這欄時每列算 1 個
+    "item": ["行項名稱", "行项名称", "Item name"],  # 只取「體積」這個行項，避免日後加了面積等行項被加進來
+    "type": ["類型", "族群與類型", "类型", "族与类型", "Type"],  # 例如 45X75、30cm，用來對照鋼筋比
 }
-VOLUME_ITEMS = {"體積", "volume"}
+VOLUME_ITEMS = {"體積", "体积", "volume"}
+# Takeoff「Inventory」摘要頁：名稱欄是「樓板 - 體積」這種行項，數量欄是體積
+SUMMARY_ALIASES = {
+    "name": ["名稱", "名称", "Name"],
+    "quantity": ["數量", "数量", "Quantity"],
+    "count": ["實例", "实例", "Instances", "Count"],
+    "unit": ["單位", "单位", "Unit"],
+}
+DETAIL_SHEETS = ("詳細資料", "詳細資訊", "详细信息", "详细资料", "Details")
 
 # 把 Revit/Takeoff 的類別名稱歸到四大類
 CATEGORY_KEYWORDS = {
-    "floors": ["樓板", "板", "floor", "slab"],
+    "floors": ["樓板", "楼板", "板", "floor", "slab"],
     "columns": ["柱", "column"],
-    "beams": ["梁", "樑", "framing", "beam"],
-    "walls": ["牆", "wall"],
+    "beams": ["梁", "樑", "構架", "构架", "framing", "beam"],
+    "walls": ["牆", "墙", "wall"],
 }
 
 logs = []
@@ -134,20 +143,46 @@ def load_changelog():
 
 # ---------- 讀取 Takeoff 匯出檔 ----------
 
-def read_table(path):
+def rows_to_table(rows):
+    rows = [r for r in rows if any(r)]
+    if len(rows) < 2:
+        return []
+    header, body = rows[0], rows[1:]
+    return [dict(zip(header, r)) for r in body]
+
+
+def read_tables(path):
+    """回傳每一頁的表格，逐構件明細頁排最前面。"""
     if path.endswith(".xlsx"):
         from openpyxl import load_workbook
         wb = load_workbook(path, data_only=True)
-        # Takeoff 匯出檔第一頁是摘要，逐構件明細在「詳細資料 - …」那一頁
-        detail = [ws for ws in wb.worksheets if ws.title.startswith(("詳細資料", "Details"))]
-        ws = detail[0] if detail else wb.active
-        rows = [[("" if c is None else str(c)).strip() for c in r] for r in ws.iter_rows(values_only=True)]
+        # Takeoff 匯出檔第一頁是摘要，逐構件明細在「詳細資料 - …」（簡體版「详细信息 - …」）那一頁
+        sheets = sorted(wb.worksheets, key=lambda ws: not ws.title.startswith(DETAIL_SHEETS))
+        tables = [rows_to_table([[("" if c is None else str(c)).strip() for c in r]
+                                 for r in ws.iter_rows(values_only=True)]) for ws in sheets]
     else:
         with open(path, encoding="utf-8-sig", newline="") as f:
-            rows = [[c.strip() for c in r] for r in csv.reader(f)]
-    rows = [r for r in rows if any(r)]
-    header, body = rows[0], rows[1:]
-    return [dict(zip(header, r)) for r in body]
+            tables = [rows_to_table([[c.strip() for c in r] for r in csv.reader(f)])]
+    return [t for t in tables if t]
+
+
+def summary_to_table(table):
+    """摘要頁轉成一般明細格式：「樓板 - 體積」那列的數量就是樓板體積。"""
+    def get(row, field):
+        for name in SUMMARY_ALIASES[field]:
+            if row.get(name):
+                return row[name]
+        return None
+    out = []
+    for row in table:
+        m = re.match(r"^(.+?)\s*[-－–]\s*(體積|体积|volume)\s*$", get(row, "name") or "", re.I)
+        if not m:
+            continue
+        unit = (get(row, "unit") or "").lower()
+        if unit and not re.search(r"m3|m³|立方", unit):
+            continue
+        out.append({"計量類型": m.group(1), "體積 (M3)": get(row, "quantity") or "0", "個數": get(row, "count") or "0"})
+    return out
 
 
 def pick(row, field):
@@ -180,19 +215,9 @@ def to_number(value):
     return float(re.sub(r"[^\d.\-]", "", value or "0") or 0)
 
 
-def load_quantities(grades):
-    for name in ("quantities.xlsx", "quantities.csv"):
-        path = os.path.join(DATA_DIR, name)
-        if os.path.exists(path):
-            break
-    else:
-        raise FileNotFoundError("找不到 data/quantities.xlsx 或 data/quantities.csv")
-
-    with open(path, "rb") as f:
-        digest = hashlib.sha256(f.read()).hexdigest()[:12]
-
+def parse_rows(rows, grades):
     elements, types = {}, {}
-    for row in read_table(path):
+    for row in rows:
         item = pick(row, "item")
         if item and item.strip().lower() not in VOLUME_ITEMS:
             continue
@@ -214,6 +239,28 @@ def load_quantities(grades):
         t = types.setdefault((key, normalize_type(pick(row, "type"))), {"volume": 0.0, "count": 0})
         t["volume"] += volume
         t["count"] += count
+
+    return elements, types
+
+
+def load_quantities(grades):
+    for name in ("quantities.xlsx", "quantities.csv"):
+        path = os.path.join(DATA_DIR, name)
+        if os.path.exists(path):
+            break
+    else:
+        raise FileNotFoundError("找不到 data/quantities.xlsx 或 data/quantities.csv")
+
+    with open(path, "rb") as f:
+        digest = hashlib.sha256(f.read()).hexdigest()[:12]
+
+    tables = read_tables(path)
+    for table in tables + [summary_to_table(t) for t in tables]:
+        elements, types = parse_rows(table, grades)
+        if elements:
+            break
+    else:
+        raise ValueError(f"{name} 裡找不到樓板、柱、梁或牆的體積，請確認欄位名稱")
 
     for el in elements.values():
         el["volume"] = round(el["volume"], 2)
