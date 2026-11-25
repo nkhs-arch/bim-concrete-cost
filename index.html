@@ -75,6 +75,33 @@
 
         <div id="load-error" class="hidden bg-rose-950/60 border border-rose-800 text-rose-300 text-sm rounded-xl p-4"></div>
 
+        <!-- 上傳體積檔：在瀏覽器裡重算，不會改到網站上的資料 -->
+        <div id="upload-section" class="bg-dark-card border border-dark-border rounded-xl p-4">
+            <div class="flex flex-col md:flex-row md:items-center gap-4">
+                <div class="md:w-80 shrink-0">
+                    <h3 class="text-sm font-semibold text-white flex items-center">
+                        <i class="fa-solid fa-file-arrow-up mr-2 text-emerald-400"></i>放入新的體積檔
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Forma Takeoff 匯出的 Excel，或 Revit 明細表 CSV。放進來就用最新單價重算整頁（只在你的瀏覽器裡預覽）。</p>
+                </div>
+                <label id="upload-drop" for="upload-input" class="flex-1 cursor-pointer border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-lg px-4 py-4 text-center text-xs text-slate-400 transition">
+                    <i class="fa-solid fa-file-excel text-emerald-400 text-lg mb-1 block"></i>
+                    <span id="upload-hint">把 .xlsx / .csv 拖到這裡，或點一下選擇檔案</span>
+                    <input id="upload-input" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+                </label>
+            </div>
+            <div id="upload-error" class="hidden mt-3 bg-rose-950/60 border border-rose-800 text-rose-300 text-xs rounded-lg p-3"></div>
+            <div id="upload-result" class="hidden mt-3 bg-emerald-950/40 border border-emerald-800 text-emerald-200 text-xs rounded-lg p-3 space-y-2">
+                <div id="upload-summary"></div>
+                <div class="flex flex-wrap gap-2">
+                    <button id="upload-download" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-download mr-1"></i>下載 quantities.csv</button>
+                    <a id="upload-github" href="#" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-brands fa-github mr-1"></i>上傳到 GitHub 存成新版本</a>
+                    <button onclick="location.reload()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-rotate-left mr-1"></i>還原網站資料</button>
+                </div>
+                <p class="text-[11px] text-emerald-300/80">要讓大家都看到：按「下載 quantities.csv」，再到 GitHub 的 data 資料夾上傳覆蓋同名檔案（data 裡如果有 quantities.xlsx 要刪掉），約 1 分鐘後網站會自動建立新版本。</p>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
 
             <!-- 最新單價 -->
@@ -459,6 +486,7 @@
                 return;
             }
 
+            setupUpload();
             renderHeader();
             // 等字型載入完再畫圖，否則圖表用預設字型量寬度，換字型後刻度會壓到軸標題
             await document.fonts.ready;
@@ -495,11 +523,12 @@
             // 鋼筋：含損耗重量 × 單價差
             const r = data.rebar;
             const rebarEffect = r && r.previous_price ? r.gross_weight_t * (r.price - r.previous_price) : 0;
-            if (r) document.getElementById('kpi-price-effect-label').innerText = '本月成本變動（混凝土＋鋼筋單價）';
+            document.getElementById('kpi-price-effect-label').innerText = r ? '本月成本變動（混凝土＋鋼筋單價）' : '本月成本變動（單價影響）';
             document.getElementById('kpi-price-effect').innerHTML = diffSpan(effect + rebarEffect, nt);
         }
 
         function initCharts() {
+            [volumePieChart, versionTrendChart, costHistoryChart].forEach(c => c && c.destroy());
             Chart.defaults.color = '#9ca3af';
             Chart.defaults.font.family = 'JetBrains Mono';
 
@@ -687,8 +716,9 @@
 
         function renderRebar() {
             const r = data.rebar;
-            if (!r) return;  // 舊版 data.json 沒有鋼筋資料
-            document.getElementById('rebar-section').classList.remove('hidden');
+            // 舊版 data.json、或上傳的檔案沒有類型欄時，沒有鋼筋資料
+            document.getElementById('rebar-section').classList.toggle('hidden', !r);
+            if (!r) return;
             const t = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
             // 鋼筋只算目前模型（舊版本的體積檔沒有類型資料）
@@ -741,6 +771,239 @@
             document.getElementById('terminal-logs').innerHTML = data.logs.map(l =>
                 `<div class="text-slate-400">[${l.time}] <span class="${TAG_COLORS[l.tag] || 'text-slate-300'}">${l.tag}</span> ${l.msg}</div>`
             ).join('');
+        }
+
+        // ---------- 上傳體積檔預覽（規則跟 scripts/build_data.py 一樣，改一邊時另一邊也要改） ----------
+
+        const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        const COLUMN_ALIASES = {
+            category: ['計量類型', '類別', '構件類別', 'Takeoff type', 'Category', 'Classification'],
+            spec: ['材質', '規格', '材料', 'Material'],
+            volume: ['體積 (M3)', '體積', '體積(m3)', '體積 (m³)', 'Volume (M3)', 'Volume'],
+            count: ['個數', 'Count'],
+            item: ['行項名稱', 'Item name'],
+            type: ['類型', '族群與類型', 'Type'],
+            level: ['樓層', '位置', 'Level'],
+        };
+        const VOLUME_ITEMS = ['體積', 'volume'];
+        const CATEGORY_KEYWORDS = {
+            floors: ['樓板', '板', 'floor', 'slab'],
+            columns: ['柱', 'column'],
+            beams: ['梁', '樑', 'framing', 'beam'],
+            walls: ['牆', 'wall'],
+        };
+        let uploaded = null;  // 最近一次上傳的明細，給「下載 quantities.csv」用
+
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const r2 = n => Math.round(n * 100) / 100;
+        const toNumber = v => parseFloat(String(v ?? '').replace(/[^\d.\-]/g, '')) || 0;
+        const pick = (row, field) => {
+            for (const name of COLUMN_ALIASES[field]) if (row[name] !== undefined && row[name] !== '') return row[name];
+            return null;
+        };
+        const classify = text => {
+            text = String(text || '').toLowerCase();
+            return Object.keys(CATEGORY_KEYWORDS).find(k => CATEGORY_KEYWORDS[k].some(w => text.includes(w))) || null;
+        };
+        const parseGrade = text => (String(text || '').match(/(\d{3})\s*kgf/) || [])[1] || null;
+        const normalizeType = text => String(text || '').replace(/\s+/g, '').toUpperCase().replace(/×/g, 'X').replace(/CM$/, 'cm');
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Excel 讀取元件下載失敗，請確認有連上網路'));
+                document.head.appendChild(s);
+            });
+        }
+
+        async function readTable(file) {
+            if (!window.XLSX) await loadScript(XLSX_URL);
+            const buf = await file.arrayBuffer();
+            let wb;
+            if (/\.csv$/i.test(file.name)) {
+                // Revit 匯出的 CSV 可能是 UTF-8 或 Big5
+                let text;
+                try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+                catch { text = new TextDecoder('big5').decode(buf); }
+                wb = XLSX.read(text.replace(/^﻿/, ''), { type: 'string', raw: true });
+            } else {
+                wb = XLSX.read(buf, { type: 'array' });
+            }
+            // Takeoff 匯出檔第一頁是摘要，逐構件明細在「詳細資料 - …」那一頁
+            const name = wb.SheetNames.find(n => n.startsWith('詳細資料') || n.startsWith('Details')) || wb.SheetNames[0];
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: true })
+                .map(r => r.map(c => String(c ?? '').trim()))
+                .filter(r => r.some(c => c));
+            if (rows.length < 2) throw new Error('檔案裡沒有資料列');
+            const header = rows[0];
+            return rows.slice(1).map(r => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ''])));
+        }
+
+        function parseQuantities(table, grades) {
+            const elements = {}, types = {}, lines = {};
+            for (const row of table) {
+                const item = pick(row, 'item');
+                if (item && !VOLUME_ITEMS.includes(item.trim().toLowerCase())) continue;
+                const category = pick(row, 'category');
+                const key = classify(category);
+                if (!key) continue;
+                const spec = pick(row, 'spec') || '';
+                const grade = parseGrade(spec) || String(grades[key] ?? '280');
+                const el = elements[key] ??= { volume: 0, count: 0, grade, spec: esc(spec) || `${grade} kgf/cm² 預拌混凝土` };
+                const volume = toNumber(pick(row, 'volume'));
+                const count = Math.trunc(toNumber(pick(row, 'count') ?? '1'));
+                el.volume += volume;
+                el.count += count;
+                const type = normalizeType(pick(row, 'type'));
+                const t = types[key + '|' + type] ??= { key, type, volume: 0, count: 0 };
+                t.volume += volume;
+                t.count += count;
+                // 下載用：同一類別、樓層、類型合併成一列，格式跟 Revit 明細表一樣
+                const level = pick(row, 'level') || '';
+                const line = lines[[category, level, type].join('|')] ??= { category, level, type, count: 0, volume: 0 };
+                line.count += count;
+                line.volume += volume;
+            }
+            if (!Object.keys(elements).length) {
+                throw new Error('找不到樓板、柱、梁或牆的體積。請確認第一列有「計量類型」和「體積 (M3)」這類欄位名稱。');
+            }
+            Object.values(elements).forEach(el => el.volume = r2(el.volume));
+            return { elements, types: Object.values(types), lines: Object.values(lines) };
+        }
+
+        async function loadCalcConfig() {
+            // build_data.py 會把計算需要的設定放在 data.json 的 calc；舊的 data.json 沒有時，直接讀 data/ 裡的原始檔
+            if (data.calc) return data.calc;
+            const get = async p => (await fetch(p, { cache: 'no-store' })).json();
+            const [cache, info, rebar] = await Promise.all([get('data/price_cache.json'), get('data/model_info.json'), get('data/rebar.json')]);
+            return { base_period: cache.base_period, base_prices: cache.base_prices, index: cache.index,
+                     grades: info.grades || {}, rebar_ratios: rebar.ratios || {} };
+        }
+
+        function pricesFor(month, calc) {
+            const base = calc.index[calc.base_period];
+            const ratio = base && calc.index[month] ? calc.index[month] / base : 1;
+            return Object.fromEntries(Object.entries(calc.base_prices).map(([g, p]) => [g, Math.round(p * ratio)]));
+        }
+
+        const costOf = (elements, prices) => Object.values(elements).reduce((s, el) => s + el.volume * priceFor(el, prices), 0);
+        const carbonOf = elements => Object.values(elements).reduce(
+            (s, el) => s + el.volume * (data.carbon_factors[el.grade] ?? data.carbon_factors['280']).factor, 0) / 1000;
+
+        async function handleUpload(file) {
+            const errBox = document.getElementById('upload-error');
+            errBox.classList.add('hidden');
+            document.getElementById('upload-hint').innerText = `讀取中：${file.name}…`;
+            try {
+                const [table, calc] = await Promise.all([readTable(file), loadCalcConfig()]);
+                const { elements, types, lines } = parseQuantities(table, calc.grades || {});
+                applyUpload(file, elements, types, calc);
+                uploaded = { name: file.name, lines };
+                rerender();
+                document.getElementById('upload-hint').innerText = `已載入：${file.name}（可再放入其他檔案）`;
+            } catch (e) {
+                errBox.innerText = '讀取失敗：' + e.message;
+                errBox.classList.remove('hidden');
+                document.getElementById('upload-hint').innerText = '把 .xlsx / .csv 拖到這裡，或點一下選擇檔案';
+            }
+        }
+
+        function applyUpload(file, elements, types, calc) {
+            const now = new Date();
+            const time = now.toTimeString().slice(0, 8);
+            const logs = [];
+            const log = (tag, msg) => logs.push({ time, tag, msg: esc(msg) });
+
+            // 只保留網站上的正式版本，重複上傳時取代上一次的預覽
+            data.versions = data.versions.filter(v => !v.is_upload);
+            const official = data.versions[data.versions.length - 1];
+            const v = {
+                version: '預覽', is_upload: true, model_name: file.name, note: '上傳檔案', author: '',
+                detected_at: now.toLocaleDateString('sv-SE'), elements,
+            };
+            v.total_volume = r2(Object.values(elements).reduce((s, e) => s + e.volume, 0));
+            v.element_count = Object.values(elements).reduce((s, e) => s + e.count, 0);
+            v.cost_at_current_price = Math.round(costOf(elements, data.prices));
+            v.carbon_tco2e = Math.round(carbonOf(elements) * 10) / 10;
+            data.versions.push(v);
+            log('TAKEOFF', `讀取上傳檔 ${file.name}：${Object.keys(elements).length} 類構件，總體積 ${v.total_volume.toLocaleString('en-US', { minimumFractionDigits: 2 })} m³`);
+
+            const months = Object.keys(calc.index).sort().slice(-12);
+            data.cost_history = months.map(m => ({ month: m, cost: Math.round(costOf(elements, pricesFor(m, calc))) }));
+
+            // 鋼筋：要有「類型」欄才能對照鋼筋比
+            data.rebar = data.rebar_official ??= data.rebar;
+            const base = data.rebar_official;
+            if (base && types.some(t => t.type)) {
+                const rows = types.map(t => {
+                    let ratio = calc.rebar_ratios[t.key]?.[t.type];
+                    if (ratio == null) {
+                        log('WARN', `rebar.json 沒有 ${t.key} ${t.type || '（無類型）'} 的鋼筋比，這列鋼筋以 0 計`);
+                        ratio = 0;
+                    }
+                    return { category: t.key, type: esc(t.type), count: t.count, volume: r2(t.volume), ratio, weight_t: r2(t.volume * ratio / 1000) };
+                });
+                const net = rows.reduce((s, r) => s + r.weight_t, 0);
+                const gross = net * (1 + base.loss_rate);
+                const cost = Math.round(gross * base.price);
+                data.rebar = {
+                    ...base, rows, cost,
+                    net_weight_t: Math.round(net * 10) / 10, gross_weight_t: Math.round(gross * 10) / 10,
+                    concrete_cost: v.cost_at_current_price, total_cost: v.cost_at_current_price + cost,
+                    carbon: base.carbon && { ...base.carbon, tco2e: Math.round(gross * base.carbon.factor * 10) / 10 },
+                };
+                log('REBAR', `鋼筋 ${net.toFixed(1)} t，含損耗 ${Math.round(base.loss_rate * 100)}% 為 ${gross.toFixed(1)} t，× ${nt(base.price)} / T = ${nt(cost)}`);
+            } else {
+                data.rebar = null;
+                if (base) log('WARN', '上傳的檔案沒有「類型」欄，無法對照鋼筋比，只算混凝土');
+            }
+            log('SUCCESS', `預覽 總體積 ${v.total_volume.toLocaleString('en-US')} m³，混凝土成本 ${nt(v.cost_at_current_price)}`
+                + (data.rebar ? `，混凝土＋鋼筋 ${nt(data.rebar.total_cost)}` : ''));
+            data.logs = [...(data.logs_official ??= data.logs), ...logs];
+
+            const diff = v.cost_at_current_price - official.cost_at_current_price;
+            document.getElementById('upload-summary').innerHTML =
+                `<i class="fa-solid fa-circle-check mr-1"></i>下方整頁已改成 <strong>${esc(file.name)}</strong> 的預覽：總體積 ${v.total_volume.toLocaleString('en-US')} m³，`
+                + `混凝土成本 ${nt(v.cost_at_current_price)}（較 ${official.version} ${diffSpan(diff, nt)}）`
+                + (data.rebar ? `，混凝土＋鋼筋 ${nt(data.rebar.total_cost)}` : '，此檔沒有類型欄，不算鋼筋')
+                + '。重新整理頁面就會回到網站資料。';
+            document.getElementById('upload-result').classList.remove('hidden');
+        }
+
+        function rerender() {
+            renderHeader();
+            initCharts();
+            renderVersionButtons();
+            showVersion(data.versions.length - 1);
+            renderRebar();
+            renderLogs();
+        }
+
+        function downloadQuantities() {
+            if (!uploaded) return;
+            const cell = s => /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            const body = uploaded.lines.map(l => [l.category, l.level, l.type, l.count, r2(l.volume)].map(x => cell(String(x))).join(','));
+            const csv = '﻿' + ['計量類型,樓層,類型,個數,體積 (M3)', ...body].join('\r\n') + '\r\n';
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+            a.download = 'quantities.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        function setupUpload() {
+            const input = document.getElementById('upload-input');
+            const drop = document.getElementById('upload-drop');
+            input.addEventListener('change', () => { if (input.files[0]) handleUpload(input.files[0]); input.value = ''; });
+            drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('border-emerald-500'); });
+            drop.addEventListener('dragleave', () => drop.classList.remove('border-emerald-500'));
+            drop.addEventListener('drop', e => {
+                e.preventDefault();
+                drop.classList.remove('border-emerald-500');
+                if (e.dataTransfer.files[0]) handleUpload(e.dataTransfer.files[0]);
+            });
+            document.getElementById('upload-download').addEventListener('click', downloadQuantities);
+            document.getElementById('upload-github').href = REPO_URL + '/upload/main/data';
         }
 
         init();

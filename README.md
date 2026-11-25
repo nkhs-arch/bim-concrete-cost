@@ -59,6 +59,9 @@ data.json → index.html 網頁儀表板
 3. 修改 `data/model_info.json` 的 `note`（例如「第二版」）
 4. 上傳後會自動重算並建立新版本（V2、V3…）
 
+### 在網頁上直接試算新的體積檔
+網站上方「放入新的體積檔」可以拖入 Forma Takeoff 匯出的 Excel 或 Revit 明細表 CSV，瀏覽器會用最新單價重算整頁（成本、鋼筋、碳排、12 個月走勢），只有自己看得到，重新整理就還原。要存成正式版本時按「下載 quantities.csv」，上傳到 GitHub 的 `data/` 覆蓋同名檔案（有 `quantities.xlsx` 要刪掉）。網頁的讀檔規則寫在 `index.html`，跟 `scripts/build_data.py` 一樣，改其中一邊時另一邊也要改。
+
 ### 設定混凝土強度
 Takeoff 匯出檔沒有強度資料，預設全部用 280 kgf/cm²。要指定時修改 `data/model_info.json`：
 

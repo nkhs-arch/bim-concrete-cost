@@ -651,6 +651,14 @@ def main():
         "cost_history": cost_history,
         "carbon_factors": carbon_factors,
         "rebar": rebar,
+        # 網頁「上傳體積檔預覽」用：在瀏覽器裡照同樣的公式重算
+        "calc": {
+            "base_period": cache["base_period"],
+            "base_prices": cache["base_prices"],
+            "index": {m: cache["index"][m] for m in months[-HISTORY_MONTHS:]},
+            "grades": info.get("grades", {}),
+            "rebar_ratios": (rebar_config or {}).get("ratios", {}),
+        },
         "changelog": load_changelog(),
         "logs": logs,
     }
