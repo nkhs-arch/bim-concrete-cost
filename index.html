@@ -118,11 +118,38 @@
                         <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg transition" title="讀入別台電腦匯出的專案檔"><i class="fa-solid fa-file-import mr-1"></i>匯入<input id="projects-import" type="file" accept=".json" class="hidden"></label>
                     </div>
                 </div>
+                <div id="projects-note" class="hidden bg-amber-950/50 border border-amber-800 text-amber-300 text-[11px] rounded-lg p-2.5"></div>
                 <div id="project-list" class="space-y-3"></div>
-                <p class="text-[11px] text-slate-500">* 你建立的專案存在這台電腦的瀏覽器裡（換電腦或清除瀏覽器資料就看不到），要帶走請按「匯出」。「選手大樓」是網站的正式資料，大家看到的都一樣。</p>
+                <div id="legacy-box" class="hidden flex items-center justify-between gap-3 bg-amber-950/40 border border-amber-800 text-amber-200 text-xs rounded-lg p-3">
+                    <span>這台電腦的瀏覽器裡還有 <strong id="legacy-count">0</strong> 個舊專案，只有這台看得到。</span>
+                    <button id="legacy-upload" class="shrink-0 bg-amber-700 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>上傳共用</button>
+                </div>
+                <p class="text-[11px] text-slate-500">* 專案存在 GitHub repo 的 data/projects.json，每台電腦、每個組員打開都看得到。建立、新增版本或刪除時需要 GitHub 權杖（每台電腦第一次輸入一次）。「選手大樓」是網站的正式資料。
+                    <button id="token-forget" class="hidden underline hover:text-slate-300">清除這台電腦存的權杖</button></p>
             </div>
         </div>
     </section>
+
+    <!-- 輸入 GitHub 權杖 -->
+    <div id="token-dialog" class="hidden fixed inset-0 z-[60] bg-black/70 items-center justify-center p-4">
+        <div class="bg-dark-card border border-dark-border rounded-xl p-5 w-full max-w-lg space-y-3 text-xs text-slate-300">
+            <h3 class="text-sm font-semibold text-white flex items-center"><i class="fa-brands fa-github mr-2"></i>輸入 GitHub 權杖才能存專案</h3>
+            <p>專案會存到 GitHub repo，所以需要一個有寫入權限的權杖。每台電腦只要輸入一次，會記在這台電腦的瀏覽器裡。</p>
+            <ol class="list-decimal pl-5 space-y-1 text-slate-400">
+                <li>打開 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" class="text-cyan-400 underline">GitHub 建立權杖頁面</a>（Fine-grained token）</li>
+                <li>Resource owner 選 <strong class="text-slate-200">nkhs-arch</strong>，Repository access 選 Only select repositories → <strong class="text-slate-200">bim-concrete-cost</strong></li>
+                <li>Permissions → Repository permissions → <strong class="text-slate-200">Contents</strong> 選 Read and write</li>
+                <li>按 Generate token，把 github_pat_ 開頭的那串貼到下面</li>
+            </ol>
+            <input id="token-input" type="password" placeholder="github_pat_…" class="w-full bg-dark-bg border border-dark-border focus:border-cyan-500 outline-none rounded-lg px-3 py-2 text-sm text-white font-mono">
+            <div id="token-error" class="hidden bg-rose-950/60 border border-rose-800 text-rose-300 rounded-lg p-2.5"></div>
+            <p class="text-[11px] text-slate-500">權杖等於密碼，不要貼在公用電腦，也不要傳給別人。</p>
+            <div class="flex justify-end gap-2">
+                <button id="token-cancel" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg transition">取消</button>
+                <button id="token-save" class="bg-cyan-700 hover:bg-cyan-600 text-white px-3 py-1.5 rounded-lg transition">確認並儲存</button>
+            </div>
+        </div>
+    </div>
 
     <main id="dashboard" class="hidden flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
@@ -543,6 +570,7 @@
             setupHome();
             // 網址後面有 #project=… 就直接開那個專案（重新整理不會跳回主畫面），否則先顯示主畫面
             const id = new URLSearchParams(location.hash.slice(1)).get('project');
+            if (id !== BUILTIN.id) await refreshProjects();
             if (id && (id === BUILTIN.id || findProject(id))) await openProject(id);
             else showHome();
             // 主畫面跟專案之間切換一律重新載入，避免上一個專案的資料殘留
@@ -961,9 +989,16 @@
                 const { elements, types, lines, calc, saved } = await readQuantityFile(file);
                 if (currentProject) {
                     // 自建專案：存成新版本
-                    currentProject.versions.push(saved);
-                    try { saveProject(currentProject); }
-                    catch (err) { currentProject.versions.pop(); throw err; }
+                    const pid = currentProject.id;
+                    document.getElementById('upload-hint').innerText = '存到 GitHub 中…';
+                    await commitProjects(list => {
+                        const p = list.find(x => x.id === pid);
+                        if (!p) throw new Error('這個專案已經被刪除了');
+                        p.versions.push(saved);
+                        p.updated_at = today();
+                        return list;
+                    }, `專案「${currentProject.name}」新增 V${currentProject.versions.length + 1}：${file.name}`);
+                    currentProject = findProject(pid);
                     applyProject(currentProject, calc);
                     const v = data.versions[data.versions.length - 1];
                     const pv = data.versions[data.versions.length - 2];
@@ -973,7 +1008,7 @@
                         + (data.rebar ? `，混凝土＋鋼筋 ${nt(data.rebar.total_cost)}` : '，此檔沒有類型欄，不算鋼筋') + '。';
                     document.getElementById('upload-result').classList.remove('hidden');
                     document.getElementById('upload-desc').innerText =
-                        `放入這個專案新版本的體積檔，會存成 V${currentProject.versions.length + 1}（存在這台電腦的瀏覽器）。`;
+                        `放入這個專案新版本的體積檔，會存成 V${currentProject.versions.length + 1}（存到 GitHub，每台電腦都看得到）。`;
                 } else {
                     applyUpload(file, elements, types, calc);
                     uploaded = { name: file.name, lines };
@@ -1067,27 +1102,118 @@
 
         // ---------- 專案（主畫面）：自己建立的專案存在瀏覽器 localStorage ----------
 
-        const STORE_KEY = 'bim-projects-v1';
+        // 專案存在 repo 的 data/projects.json，所以每台電腦都看得到；寫入要用 GitHub 權杖
+        const PROJECTS_PATH = 'data/projects.json';
+        const PROJECTS_API = REPO_URL.replace('https://github.com/', 'https://api.github.com/repos/') + '/contents/' + PROJECTS_PATH;
+        const TOKEN_KEY = 'bim-gh-token';
+        const LEGACY_KEY = 'bim-projects-v1';   // 舊版存在瀏覽器裡的專案
         const BUILTIN = { id: 'builtin', name: '選手大樓' };
+        let projects = [];           // 共用專案（從 GitHub 讀來的）
+        let projectsNote = '';       // 讀取時的提醒（例如 GitHub 暫時連不到）
         let currentProject = null;   // 目前開啟的自建專案（選手大樓時是 null）
         let newProjectFile = null;   // 主畫面「建立新專案」選好的檔案
 
-        function loadProjects() {
+        const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } };
+        const setToken = t => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} };
+        const b64encode = text => { const bytes = new TextEncoder().encode(text); let bin = ''; bytes.forEach(c => bin += String.fromCharCode(c)); return btoa(bin); };
+        const b64decode = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), c => c.charCodeAt(0)));
+        const validProjects = list => (Array.isArray(list) ? list : []).filter(p => p && p.id && p.name && Array.isArray(p.versions));
+
+        // 直接讀 GitHub（最新的）；GitHub 連不到時退回網站上的檔案（可能慢 1 分鐘）
+        async function fetchProjects({ strict = false } = {}) {
+            const headers = { Accept: 'application/vnd.github+json' };
+            const token = getToken();
+            if (token) headers.Authorization = 'Bearer ' + token;
             try {
-                const list = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
-                return Array.isArray(list) ? list.filter(p => p && p.id && Array.isArray(p.versions)) : [];
-            } catch { return []; }
+                const r = await fetch(`${PROJECTS_API}?ref=main&t=${Date.now()}`, { headers, cache: 'no-store' });
+                if (r.status === 404) return { list: [], sha: null };
+                if (r.status === 401 && token) { setToken(''); return fetchProjects({ strict }); }
+                if (!r.ok) throw new Error(`GitHub 回應 ${r.status}`);
+                const j = await r.json();
+                return { list: validProjects(JSON.parse(b64decode(j.content)).projects), sha: j.sha };
+            } catch (e) {
+                if (strict) throw new Error('連不到 GitHub：' + e.message);
+                try {
+                    const j = await (await fetch(PROJECTS_PATH, { cache: 'no-store' })).json();
+                    return { list: validProjects(j.projects), sha: null, note: 'GitHub 暫時連不到，顯示的是網站上的版本，最新的修改可能還沒出現。' };
+                } catch { return { list: [], sha: null, note: '讀不到共用專案清單。' }; }
+            }
         }
-        function saveProjects(list) {
-            try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; }
-            catch { return false; }
+
+        async function refreshProjects() {
+            const r = await fetchProjects();
+            projects = r.list;
+            projectsNote = r.note || '';
         }
-        const findProject = id => loadProjects().find(p => p.id === id);
-        function saveProject(project) {
-            const list = loadProjects().filter(p => p.id !== project.id);
-            list.unshift(project);
-            if (!saveProjects(list)) throw new Error('瀏覽器不讓網站存資料（可能是無痕模式或空間已滿），專案沒有存起來');
+
+        const findProject = id => projects.find(p => p.id === id);
+
+        // 改共用專案：每次都拿 GitHub 上最新的清單來改，別人同時改也不會互相蓋掉
+        async function commitProjects(mutate, message) {
+            const token = await requireToken();
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const { list, sha } = await fetchProjects({ strict: true });
+                const next = mutate(structuredClone(list));
+                const body = {
+                    message, branch: 'main',
+                    content: b64encode(JSON.stringify({ format: 'bim-concrete-cost-projects', projects: next }, null, 1) + '\n'),
+                };
+                if (sha) body.sha = sha;
+                const r = await fetch(PROJECTS_API, {
+                    method: 'PUT', body: JSON.stringify(body),
+                    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+                });
+                if (r.ok) { projects = next; projectsNote = ''; return; }
+                if (r.status === 409 || r.status === 422) continue;   // 剛好有人同時改，重拿一次
+                if (r.status === 401) { setToken(''); throw new Error('GitHub 權杖無效或已過期，請重新輸入'); }
+                if (r.status === 403 || r.status === 404) throw new Error('這個權杖沒有寫入 repo 的權限（Contents 要選 Read and write）');
+                throw new Error(`GitHub 回應 ${r.status}`);
+            }
+            throw new Error('同時有其他人在改專案，請再試一次');
         }
+
+        // 沒有權杖時跳出輸入框；驗證通過才存起來
+        function requireToken() {
+            const token = getToken();
+            if (token) return Promise.resolve(token);
+            const dlg = document.getElementById('token-dialog');
+            const input = document.getElementById('token-input');
+            const err = document.getElementById('token-error');
+            err.classList.add('hidden');
+            input.value = '';
+            dlg.classList.remove('hidden');
+            dlg.classList.add('flex');
+            input.focus();
+            return new Promise((resolve, reject) => {
+                const close = () => { dlg.classList.add('hidden'); dlg.classList.remove('flex'); ok.onclick = cancel.onclick = null; };
+                const ok = document.getElementById('token-save');
+                const cancel = document.getElementById('token-cancel');
+                cancel.onclick = () => { close(); reject(new Error('沒有輸入 GitHub 權杖，所以沒有存到共用專案')); };
+                ok.onclick = async () => {
+                    const t = input.value.trim();
+                    if (!t) return;
+                    ok.disabled = true;
+                    try {
+                        const r = await fetch(REPO_URL.replace('https://github.com/', 'https://api.github.com/repos/'),
+                            { headers: { Authorization: 'Bearer ' + t, Accept: 'application/vnd.github+json' } });
+                        if (!r.ok) throw new Error(r.status === 401 ? '權杖不正確或已過期' : '這個權杖看不到這個 repo，請確認 Repository access 有選到它');
+                        const j = await r.json();
+                        if (j.permissions && !j.permissions.push) throw new Error('這個帳號沒有這個 repo 的寫入權限');
+                        setToken(t);
+                        close();
+                        resolve(t);
+                    } catch (e) {
+                        err.innerText = e.message;
+                        err.classList.remove('hidden');
+                    } finally { ok.disabled = false; }
+                };
+            });
+        }
+
+        function legacyProjects() {
+            try { return validProjects(JSON.parse(localStorage.getItem(LEGACY_KEY) || '[]')); } catch { return []; }
+        }
+
         const newId = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         const today = () => new Date().toLocaleDateString('sv-SE');
         const shortName = name => { const n = String(name).replace(/\.[^.]+$/, ''); return n.length > 14 ? n.slice(0, 13) + '…' : n; };
@@ -1142,7 +1268,7 @@
             document.querySelectorAll('[data-official]').forEach(el => el.classList.toggle('hidden', !isBuiltin));
             document.getElementById('upload-desc').innerText = isBuiltin
                 ? 'Forma Takeoff 匯出的 Excel，或 Revit 明細表 CSV。放進來就用最新單價重算整頁（只在你的瀏覽器裡預覽）。'
-                : `放入這個專案新版本的體積檔，會存成 V${currentProject.versions.length + 1}（存在這台電腦的瀏覽器）。`;
+                : `放入這個專案新版本的體積檔，會存成 V${currentProject.versions.length + 1}（存到 GitHub，每台電腦都看得到）。`;
 
             document.getElementById('home').classList.add('hidden');
             document.getElementById('dashboard').classList.remove('hidden');
@@ -1198,22 +1324,47 @@
                 id: BUILTIN.id, name: BUILTIN.name, tag: '網站正式資料',
                 detail: `${data.versions.length} 個版本 · 最新 ${official.version} ${official.total_volume.toLocaleString('en-US')} m³ · 更新 ${esc(data.generated_at)}`,
             })];
-            for (const p of loadProjects()) {
+            for (const p of projects) {
                 const last = p.versions[p.versions.length - 1];
                 cards.push(projectCard({
-                    id: p.id, name: p.name, tag: '我的專案', deletable: true,
+                    id: p.id, name: p.name, tag: '共用專案', deletable: true,
                     detail: last
                         ? `${p.versions.length} 個版本 · 最新 ${esc(last.file)}${last.total_volume != null ? ` ${last.total_volume.toLocaleString('en-US')} m³` : ''} · ${esc(last.date)}`
                         : '還沒有體積檔',
                 }));
             }
             document.getElementById('project-list').innerHTML = cards.join('');
+            const note = document.getElementById('projects-note');
+            note.innerText = projectsNote;
+            note.classList.toggle('hidden', !projectsNote);
+            const legacy = legacyProjects().filter(p => !findProject(p.id));
+            document.getElementById('legacy-box').classList.toggle('hidden', !legacy.length);
+            document.getElementById('legacy-count').innerText = legacy.length;
+            document.getElementById('token-forget').classList.toggle('hidden', !getToken());
         }
 
-        function deleteProject(id) {
+        async function deleteProject(id) {
             const p = findProject(id);
-            if (!p || !confirm(`確定要刪除專案「${p.name}」嗎？刪除後無法復原（建議先按「匯出」備份）。`)) return;
-            saveProjects(loadProjects().filter(x => x.id !== id));
+            if (!p || !confirm(`確定要刪除專案「${p.name}」嗎？每台電腦都會看不到（GitHub 的歷史紀錄裡還找得回來）。`)) return;
+            try {
+                await commitProjects(list => list.filter(x => x.id !== id), `刪除專案「${p.name}」`);
+            } catch (e) { alert('刪除失敗：' + e.message); }
+            renderProjectList();
+        }
+
+        // 舊版存在這台電腦瀏覽器裡的專案，搬到 GitHub 共用
+        async function migrateLegacy() {
+            const legacy = legacyProjects();
+            const btn = document.getElementById('legacy-upload');
+            btn.disabled = true;
+            try {
+                await commitProjects(list => {
+                    const ids = new Set(list.map(p => p.id));
+                    return [...list, ...legacy.filter(p => !ids.has(p.id))];
+                }, `從瀏覽器搬移 ${legacy.length} 個專案`);
+                try { localStorage.removeItem(LEGACY_KEY); } catch {}
+            } catch (e) { alert('搬移失敗：' + e.message); }
+            btn.disabled = false;
             renderProjectList();
         }
 
@@ -1230,14 +1381,18 @@
             errBox.classList.add('hidden');
             const name = document.getElementById('new-project-name').value.trim();
             if (!name) return fail('請輸入專案名稱');
-            if (name === BUILTIN.name || loadProjects().some(p => p.name === name)) return fail(`已經有叫「${name}」的專案，請換個名稱`);
+            if (name === BUILTIN.name || projects.some(p => p.name === name)) return fail(`已經有叫「${name}」的專案，請換個名稱`);
             if (!newProjectFile) return fail('請放入體積檔（.xlsx 或 .csv）');
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>讀取中…';
             try {
                 const { saved } = await readQuantityFile(newProjectFile);
-                const project = { id: newId(), name, created_at: today(), versions: [saved] };
-                saveProject(project);
+                const project = { id: newId(), name, created_at: today(), updated_at: today(), versions: [saved] };
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>存到 GitHub 中…';
+                await commitProjects(list => {
+                    if (list.some(p => p.name === name)) throw new Error(`已經有叫「${name}」的專案，請換個名稱`);
+                    return [project, ...list];
+                }, `新增專案「${name}」：${newProjectFile.name}`);
                 await openProject(project.id);
             } catch (err) {
                 fail('建立失敗：' + err.message);
@@ -1248,7 +1403,6 @@
         }
 
         function exportProjects() {
-            const projects = loadProjects();
             if (!projects.length) return alert('還沒有自己建立的專案可以匯出');
             const blob = new Blob([JSON.stringify({ format: 'bim-concrete-cost-projects', exported_at: today(), projects }, null, 1)], { type: 'application/json' });
             const a = document.createElement('a');
@@ -1264,7 +1418,7 @@
                 const incoming = (json.projects || []).filter(p => p && p.id && p.name && Array.isArray(p.versions));
                 if (!incoming.length) throw new Error('檔案裡沒有專案');
                 const ids = new Set(incoming.map(p => p.id));
-                if (!saveProjects([...incoming, ...loadProjects().filter(p => !ids.has(p.id))])) throw new Error('瀏覽器不讓網站存資料');
+                await commitProjects(list => [...incoming, ...list.filter(p => !ids.has(p.id))], `匯入 ${incoming.length} 個專案`);
                 renderProjectList();
                 alert(`已匯入 ${incoming.length} 個專案`);
             } catch (err) {
@@ -1285,6 +1439,9 @@
                 if (e.dataTransfer.files[0]) setNewProjectFile(e.dataTransfer.files[0]);
             });
             document.getElementById('projects-export').addEventListener('click', exportProjects);
+            document.getElementById('legacy-upload').addEventListener('click', migrateLegacy);
+            document.getElementById('token-forget').addEventListener('click', () => { setToken(''); renderProjectList(); });
+            document.getElementById('token-input').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('token-save').click(); });
             const imp = document.getElementById('projects-import');
             imp.addEventListener('change', () => { if (imp.files[0]) importProjects(imp.files[0]); imp.value = ''; });
         }
