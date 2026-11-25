@@ -56,6 +56,8 @@ TW = timezone(timedelta(hours=8))
 
 PCC_FILE_URL = "https://pcic.pcc.gov.tw/pwc-web/api/service/opendata-file/document/"
 PCC_PRICE_URL = PCC_FILE_URL + urllib.parse.quote("預拌混凝土.csv")
+PCC_HOST = urllib.parse.urlparse(PCC_FILE_URL).hostname
+PCC_HINT = "（GitHub 的主機在海外，工程會網站常連不上；在自己電腦執行一次 build_data.py 再上傳即可更新）"
 PCC_REBAR_URL = PCC_FILE_URL + urllib.parse.quote("鋼筋.csv")  # data.gov.tw/dataset/6820
 DGBAS_INDEX_URL = "https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230553/pr0501a1m.xml"
 INDEX_ITEM = "水泥及其製品類"
@@ -95,6 +97,8 @@ logs = []
 
 def log(tag, msg):
     now = datetime.now(TW).strftime("%H:%M:%S")
+    # 網頁用 innerHTML 顯示紀錄，「<urlopen error ...>」這種角括號會被當成標籤吃掉，所以換成全形
+    msg = str(msg).replace("<", "＜").replace(">", "＞")
     logs.append({"time": now, "tag": tag, "msg": msg})
     print(f"[{now}] {tag} {msg}")
 
@@ -264,15 +268,25 @@ def fetch_missing_intermediate(host):
     log("CERT", f"{host} 憑證缺中繼憑證，已自動從 {url} 補上")
 
 
+unreachable_hosts = set()  # 這次執行已經連不上的網站，同一個網站不再重試，省下每次 60 秒的等待
+
+
 def download(url):
+    host = urllib.parse.urlparse(url).hostname
+    if host in unreachable_hosts:
+        raise ConnectionError(f"{host} 剛才已連線逾時，這次略過")
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (bim-concrete-cost)"})
     try:
         with urllib.request.urlopen(req, timeout=60, context=ssl_context()) as res:
             return res.read()
-    except urllib.error.URLError as e:
-        if not isinstance(e.reason, ssl.SSLCertVerificationError):
+    except (urllib.error.URLError, TimeoutError) as e:
+        reason = getattr(e, "reason", e)
+        if isinstance(reason, TimeoutError):
+            unreachable_hosts.add(host)
+            raise ConnectionError(f"連線 {host} 逾時") from e
+        if not isinstance(reason, ssl.SSLCertVerificationError):
             raise
-        fetch_missing_intermediate(urllib.parse.urlparse(url).hostname)
+        fetch_missing_intermediate(host)
     with urllib.request.urlopen(req, timeout=60, context=ssl_context()) as res:
         return res.read()
 
@@ -364,7 +378,8 @@ def load_price_data(region, rebar_spec):
     except Exception as e:
         if cache.get("region") != region:
             raise
-        log("WARN", f"工程會價格下載失敗（{e}），改用上次的資料")
+        log("WARN", f"工程會價格下載失敗（{e}），改用上次的資料"
+                    + (PCC_HINT if os.environ.get("GITHUB_ACTIONS") and PCC_HOST in str(e) else ""))
 
     rebar = cache.setdefault("rebar", {})
     try:
@@ -374,7 +389,8 @@ def load_price_data(region, rebar_spec):
     except Exception as e:
         # 鋼筋單價抓不到不中斷，混凝土照常計算
         if rebar.get("region") == region and "base_price" in rebar:
-            log("WARN", f"工程會鋼筋價格下載失敗（{e}），改用上次的資料")
+            log("WARN", f"工程會鋼筋價格下載失敗（{e}），改用上次的資料"
+                    + (PCC_HINT if os.environ.get("GITHUB_ACTIONS") and PCC_HOST in str(e) else ""))
         else:
             rebar.pop("base_price", None)
             log("WARN", f"工程會鋼筋價格下載失敗（{e}），也沒有快取，改用 rebar.json 的參考價")
@@ -651,14 +667,6 @@ def main():
         "cost_history": cost_history,
         "carbon_factors": carbon_factors,
         "rebar": rebar,
-        # 網頁「上傳體積檔預覽」用：在瀏覽器裡照同樣的公式重算
-        "calc": {
-            "base_period": cache["base_period"],
-            "base_prices": cache["base_prices"],
-            "index": {m: cache["index"][m] for m in months[-HISTORY_MONTHS:]},
-            "grades": info.get("grades", {}),
-            "rebar_ratios": (rebar_config or {}).get("ratios", {}),
-        },
         "changelog": load_changelog(),
         "logs": logs,
     }
