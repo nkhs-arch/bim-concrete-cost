@@ -28,6 +28,9 @@ jobs:
       - run: pip install openpyxl certifi cryptography
 
       - run: python scripts/build_data.py
+        env:
+          # 環境部自己的金鑰（選填）；沒設定時用共用金鑰
+          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
 
       - name: 把計算結果存回 repo
         run: |

@@ -62,9 +62,11 @@ PCC_REBAR_URL = PCC_FILE_URL + urllib.parse.quote("鋼筋.csv")  # data.gov.tw/d
 DGBAS_INDEX_URL = "https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230553/pr0501a1m.xml"
 INDEX_ITEM = "水泥及其製品類"
 REBAR_INDEX_ITEM = "金屬製品類"
-# api_key 是政府資料開放平臺（data.gov.tw/dataset/28176）公開提供的下載金鑰
-CFP_URL = ("https://data.moenv.gov.tw/api/v2/cfp_p_02?api_key=4c89a32a-a214-461b-bf29-30ff32a61a8a"
-           "&limit=1000&offset={offset}&format=CSV")
+# 預設 api_key 是政府資料開放平臺（data.gov.tw/dataset/28176）公開的共用金鑰，每天全部使用者合計只能呼叫 5000 次，
+# 常常被用完；到 data.moenv.gov.tw 註冊自己的金鑰後，設成環境變數 MOENV_API_KEY（GitHub 放在 Secrets）就會改用自己的
+MOENV_PUBLIC_KEY = "4c89a32a-a214-461b-bf29-30ff32a61a8a"
+CFP_URL = ("https://data.moenv.gov.tw/api/v2/cfp_p_02?api_key=" + (os.environ.get("MOENV_API_KEY") or MOENV_PUBLIC_KEY)
+           + "&limit=1000&offset={offset}&format=CSV")
 # 只取一般預拌混凝土，例如「預拌混凝土(280 kgf/cm2)」；水中、自充填、加飛灰爐石等特殊配比不算
 CFP_CONCRETE = re.compile(r"^預拌混凝土\((\d{2,3})\s*kgf/cm2\)$")
 CARBON_REBAR_KEY = "rebar"  # carbon_cache.json 裡放鋼筋係數的欄位，其他欄位都是混凝土強度
@@ -546,6 +548,12 @@ def fetch_carbon_factors(rebar_spec):
     rows, offset = [], 0
     while True:
         text = download(CFP_URL.format(offset=offset)).decode("utf-8-sig")
+        # 額度用完時，環境部仍回 HTTP 200，內容只有一句「…每日呼叫API的次數不可大於5000次。」
+        if "name" not in text.split("\n", 1)[0]:
+            if "次數" in text or "API" in text:
+                raise ValueError("環境部 API 今日呼叫次數已滿（共用金鑰每天 5000 次）；"
+                                 "可到 data.moenv.gov.tw 註冊自己的金鑰，設成環境變數 MOENV_API_KEY")
+            raise ValueError(f"環境部回傳的不是係數表：{text[:60]}")
         page = list(csv.DictReader(io.StringIO(text)))
         rows += page
         if len(page) < 1000:
