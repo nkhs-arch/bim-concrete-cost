@@ -98,7 +98,7 @@
                     <label id="new-project-drop" for="new-project-file" class="block cursor-pointer border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-lg px-3 py-4 text-center transition">
                         <i class="fa-solid fa-file-excel text-emerald-400 text-lg mb-1 block"></i>
                         <span id="new-project-file-hint">把 .xlsx / .csv 拖到這裡，或點一下選擇檔案</span>
-                        <input id="new-project-file" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+                        <input id="new-project-file" type="file" accept=".xlsx,.xls,.csv" multiple class="hidden">
                     </label>
                 </div>
                 <div id="new-project-error" class="hidden bg-rose-950/60 border border-rose-800 text-rose-300 text-xs rounded-lg p-3"></div>
@@ -184,8 +184,8 @@
                 </div>
                 <label id="upload-drop" for="upload-input" class="flex-1 cursor-pointer border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-lg px-4 py-4 text-center text-xs text-slate-400 transition">
                     <i class="fa-solid fa-file-excel text-emerald-400 text-lg mb-1 block"></i>
-                    <span id="upload-hint">把 .xlsx / .csv 拖到這裡，或點一下選擇檔案</span>
-                    <input id="upload-input" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+                    <span id="upload-hint">把 .xlsx / .csv 拖到這裡，或點一下選擇檔案（可一次選多個，例如柱、梁、板明細表）</span>
+                    <input id="upload-input" type="file" accept=".xlsx,.xls,.csv" multiple class="hidden">
                 </label>
             </div>
             <div id="upload-error" class="hidden mt-3 bg-rose-950/60 border border-rose-800 text-rose-300 text-xs rounded-lg p-3"></div>
@@ -1589,9 +1589,26 @@
             '個數': String(l.count), '體積 (M3)': String(l.volume),
         }));
 
+        // 一次放多個檔案（例如 Revit 的柱、梁、板明細表各一個）時合併成一個版本
+        const bundleFiles = list => {
+            list = [...list];
+            return list.length === 1 ? list[0] : { name: list.map(f => f.name).join('＋'), parts: list };
+        };
+
         async function readQuantityFile(file, opts = {}) {
             const base = await loadCalcConfig();
-            const { table, mapping } = await mapQuantityFile(file, base, opts);
+            let table = [], mapping = opts.saved === undefined ? savedMapping() : opts.saved;
+            for (const part of file.parts || [file]) {
+                const r = await mapQuantityFile(part, calcWith(base, mapping), { ...opts, saved: mapping });
+                table = table.concat(r.table);
+                if (r.mapping) mapping = !mapping ? r.mapping : {
+                    ...r.mapping,
+                    categories: { ...mapping.categories, ...r.mapping.categories },
+                    types: { ...mapping.types, ...r.mapping.types },
+                    ratios: Object.fromEntries([...new Set([...Object.keys(mapping.ratios || {}), ...Object.keys(r.mapping.ratios || {})])]
+                        .map(k => [k, { ...(mapping.ratios?.[k] || {}), ...(r.mapping.ratios?.[k] || {}) }])),
+                };
+            }
             const calc = calcWith(base, mapping);
             const parsed = parseQuantities(table, calc.grades || {});
             const total = r2(Object.values(parsed.elements).reduce((s, e) => s + e.volume, 0));
@@ -1798,13 +1815,13 @@
             document.getElementById('new-project-form').addEventListener('submit', createProject);
             const input = document.getElementById('new-project-file');
             const drop = document.getElementById('new-project-drop');
-            input.addEventListener('change', () => { if (input.files[0]) setNewProjectFile(input.files[0]); input.value = ''; });
+            input.addEventListener('change', () => { if (input.files.length) setNewProjectFile(bundleFiles(input.files)); input.value = ''; });
             drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('border-emerald-500'); });
             drop.addEventListener('dragleave', () => drop.classList.remove('border-emerald-500'));
             drop.addEventListener('drop', e => {
                 e.preventDefault();
                 drop.classList.remove('border-emerald-500');
-                if (e.dataTransfer.files[0]) setNewProjectFile(e.dataTransfer.files[0]);
+                if (e.dataTransfer.files.length) setNewProjectFile(bundleFiles(e.dataTransfer.files));
             });
             document.getElementById('projects-export').addEventListener('click', exportProjects);
             document.getElementById('legacy-upload').addEventListener('click', migrateLegacy);
@@ -1838,13 +1855,13 @@
         function setupUpload() {
             const input = document.getElementById('upload-input');
             const drop = document.getElementById('upload-drop');
-            input.addEventListener('change', () => { if (input.files[0]) handleUpload(input.files[0]); input.value = ''; });
+            input.addEventListener('change', () => { if (input.files.length) handleUpload(bundleFiles(input.files)); input.value = ''; });
             drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('border-emerald-500'); });
             drop.addEventListener('dragleave', () => drop.classList.remove('border-emerald-500'));
             drop.addEventListener('drop', e => {
                 e.preventDefault();
                 drop.classList.remove('border-emerald-500');
-                if (e.dataTransfer.files[0]) handleUpload(e.dataTransfer.files[0]);
+                if (e.dataTransfer.files.length) handleUpload(bundleFiles(e.dataTransfer.files));
             });
             document.getElementById('upload-download').addEventListener('click', downloadQuantities);
             document.getElementById('upload-remap').addEventListener('click', () => lastUploadFile && handleUpload(lastUploadFile, { force: true }));
