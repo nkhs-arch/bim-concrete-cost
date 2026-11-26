@@ -15,7 +15,7 @@
     "base_period": "2026-10",
     "carbon": {
       "per_m2": 1.0,
-      "note": "模板 1.00 kgCO₂e / m²（建研所 LEBR 附錄一 P-LCC 2022「木模板（1.5cm）」）"
+      "note": "模板 1.00 kgCO₂e / m²（建研所 LEBR 2025 年版附錄一 P-LCC 2022「木模板（1.5cm）」）"
     }
   },
   "brick": {
@@ -45,7 +45,7 @@
     "carbon": {
       "per_piece": 0.45,
       "mortar_per_m3": 452.5,
-      "note": "紅磚 0.45 kgCO₂e / 塊（LEBR P-LCC「紅磚（20*9.5*5cm）」）、1:3 水泥砂漿 452.5 kgCO₂e / m³（由「1:3 水泥砂漿粉刷 2cm 厚」9.05 kgCO₂e/m² 換算）"
+      "note": "紅磚 0.45 kgCO₂e / 塊（LEBR 2025 年版 P-LCC「紅磚（20*9.5*5cm）」）、1:3 水泥砂漿 452.5 kgCO₂e / m³（由「1:3 水泥砂漿粉刷 2cm 厚」9.05 kgCO₂e/m² 換算）"
     }
   }
 }
