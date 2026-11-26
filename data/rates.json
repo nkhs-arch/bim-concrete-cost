@@ -12,7 +12,11 @@
       "walls": 13
     },
     "fallback_note": "沒有類型尺寸也沒有面積時，用每 m³ 混凝土的模板面積經驗值估算（m²/m³）",
-    "base_period": "2026-10"
+    "base_period": "2026-10",
+    "carbon": {
+      "per_m2": 1.5,
+      "note": "模板碳排 1.5 kgCO₂e / m²（每次使用）：18 mm 夾板約 11 kg/m² × 0.68 kgCO₂e/kg（ICE v3 夾板）÷ 重複使用約 5 次；參考值，環境部尚無模板係數"
+    }
   },
   "brick": {
     "half": {
@@ -37,6 +41,11 @@
       "https://diy.greenleaf168.tw/how-much-does-a-brick-wall-cost-per-square-meter/"
     ],
     "price_compare": "參考：砌紅磚牆連工帶料 1/2B 約 NT$ 4,000～5,000/坪（≈ 1,210～1,520/m²）、1B 約 5,000～7,000/坪，不含打底、粉光",
-    "base_period": "2025-06"
+    "base_period": "2025-06",
+    "carbon": {
+      "per_piece": 0.53,
+      "mortar_per_m3": 420,
+      "note": "紅磚 0.53 kgCO₂e / 塊（約 2.5 kg × 0.213 kgCO₂e/kg，ICE v3 黏土磚）、1:3 水泥砂漿 420 kgCO₂e / m³（約 1,900 kg × 0.221，ICE）；參考值，環境部尚無紅磚係數"
+    }
   }
 }

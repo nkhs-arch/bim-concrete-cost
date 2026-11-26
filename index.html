@@ -784,6 +784,7 @@
                 ? `混凝土較 ${prev.version} 變動 ${diffSpan(v.cost_at_current_price - prev.cost_at_current_price, nt)}`
                 : '基準版本';
             document.getElementById('kpi-cost-diff').innerHTML = costParts ? `${costParts}<br>${costDiff}` : costDiff;
+            renderCarbon(v, ORDER.filter(k => v.elements[k]));
         }
 
         function showVersion(i) {
@@ -921,19 +922,40 @@
             const factorFor = el => factors[el.grade] ?? factors['280'];
             const t1 = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-            // 鋼筋只有目前模型有（V1 沒有類型資料）
+            // 鋼筋、模板、磚只有目前模型有（V1 沒有類型資料）；模板、磚來自「計算成果與分區」，跟著勾選
             const isLatest = v === data.versions[data.versions.length - 1];
             const rc = isLatest ? data.rebar?.carbon : null;
-            const total = v.carbon_tco2e + (rc ? rc.tco2e : 0);
+            const ex = isLatest && zoneExtra ? zoneExtra : {};
+            const parts = [['混凝土', v.carbon_tco2e]];
+            if (rc) parts.push(['鋼筋', rc.tco2e]);
+            if (ex.fwC) parts.push(['模板', ex.fwC]);
+            if (ex.brickC) parts.push(['磚', ex.brickC]);
+            const total = parts.reduce((t, p) => t + p[1], 0);
+            const names = parts.map(p => p[0]).join('＋');
 
             document.getElementById('carbon-version').innerText = v.version;
-            document.getElementById('carbon-title').innerText = rc ? '混凝土＋鋼筋' : '混凝土';
-            document.getElementById('carbon-total-label').innerText = rc ? '蘊含碳總量（混凝土＋鋼筋）' : '混凝土蘊含碳總量';
+            document.getElementById('carbon-title').innerText = names;
+            document.getElementById('carbon-total-label').innerText = parts.length > 1 ? `蘊含碳總量（${names}）` : '混凝土蘊含碳總量';
             document.getElementById('carbon-total').innerText = t1(total);
-            document.getElementById('carbon-equiv').innerText = rc
-                ? `混凝土 ${t1(v.carbon_tco2e)}（${(v.carbon_tco2e / total * 100).toFixed(0)}%）＋ 鋼筋 ${t1(rc.tco2e)}（${(rc.tco2e / total * 100).toFixed(0)}%）`
+            document.getElementById('carbon-equiv').innerText = parts.length > 1
+                ? parts.map(p => `${p[0]} ${t1(p[1])}（${(p[1] / total * 100).toFixed(0)}%）`).join('＋ ')
                 : `平均每 m³ 混凝土 ${Math.round(v.carbon_tco2e * 1000 / v.total_volume)} kgCO₂e`;
-
+            const fwF = zoneRates?.formwork?.carbon, brF = zoneRates?.brick?.carbon;
+            const extraRows = (ex.fwC ? `<tr class="hover:bg-dark-hover transition">
+                    <td class="p-2.5 font-medium text-white">模板</td>
+                    <td class="p-2.5 text-right text-sky-400">${Math.round(ex.fwM2).toLocaleString('en-US')} m²</td>
+                    <td class="p-2.5 text-right">${fwF.per_m2} /m²</td>
+                    <td class="p-2.5 text-right text-emerald-400 font-semibold">${t1(ex.fwC)}</td>
+                </tr>` : '') + (ex.brickC ? `<tr class="hover:bg-dark-hover transition">
+                    <td class="p-2.5 font-medium text-white">磚牆（紅磚＋砂漿）</td>
+                    <td class="p-2.5 text-right text-rose-400">${Math.round(ex.brickPcs).toLocaleString('en-US')} 塊</td>
+                    <td class="p-2.5 text-right">${brF.per_piece} /塊</td>
+                    <td class="p-2.5 text-right text-emerald-400 font-semibold">${t1(ex.brickC)}</td>
+                </tr>` : '');
+            const sumRow = parts.length > 1 ? `<tr class="border-t border-dark-border">
+                    <td class="p-2.5 font-semibold text-white">合計</td><td></td><td></td>
+                    <td class="p-2.5 text-right text-emerald-300 font-bold">${t1(total)}</td>
+                </tr>` : '';
             const rebarRow = rc ? `<tr class="hover:bg-dark-hover transition">
                     <td class="p-2.5 font-medium text-white">鋼筋（含損耗）</td>
                     <td class="p-2.5 text-right text-orange-400">${t1(data.rebar.gross_weight_t)} t</td>
@@ -949,10 +971,12 @@
                     <td class="p-2.5 text-right">${f} /m³</td>
                     <td class="p-2.5 text-right text-emerald-400 font-semibold">${(el.volume * f / 1000).toFixed(1)}</td>
                 </tr>`;
-            }).join('') + rebarRow;
+            }).join('') + rebarRow + extraRows + sumRow;
 
             document.getElementById('carbon-scope').innerText = rc
-                ? `鋼筋以含 ${Math.round(data.rebar.loss_rate * 100)}% 損耗搭接的採購量計算。含混凝土與鋼筋，尚未含模板與施工機具。`
+                ? `鋼筋以含 ${Math.round(data.rebar.loss_rate * 100)}% 損耗搭接的採購量計算。`
+                    + (ex.fwC || ex.brickC ? `模板、磚的數量來自「計算成果與分區」（取消勾選就不算）。${[ex.fwC && fwF.note, ex.brickC && brF.note].filter(Boolean).join('；')}。` : '模板、磚在「計算成果與分區」勾選後才會列入。')
+                    + '尚未含施工機具與運輸。'
                 : (data.rebar ? '此版本沒有鋼筋資料（舊模型無類型資料），只算混凝土。' : '目前只算混凝土材料，尚未含鋼筋、模板與施工機具的碳排。');
 
             const used = [...new Set(keys.map(k => v.elements[k].grade))].map(g => {
@@ -2096,7 +2120,8 @@
             const spec = t && t >= br.full_from_cm ? br.full : br.half;
             const pieces = area * spec.pieces * (1 + br.loss_rate);
             const mortar = area * spec.mortar_m3 * (1 + br.loss_rate);
-            return { m2: area, pieces, mortar, cost: pieces * br.brick_price + mortar * br.mortar_price + area * (br.labor_per_m2 || 0), assumedHalf: !t };
+            const kg = pieces * (br.carbon?.per_piece || 0) + mortar * (br.carbon?.mortar_per_m3 || 0);
+            return { m2: area, pieces, mortar, kg, cost: pieces * br.brick_price + mortar * br.mortar_price + area * (br.labor_per_m2 || 0), assumedHalf: !t };
         }
 
         function readOutputs() {
@@ -2136,13 +2161,13 @@
                     const label = group === 'all' ? '整棟' : group === 'level' ? level0
                         : group === 'category' ? KEY_LABEL[key] : `${level0}｜${KEY_LABEL[key]}`;
                     const sortKey = group === 'category' ? ord(key) : group === 'level-category' ? [level0, ord(key)] : level0;
-                    return groups[label] ??= { label, sortKey, volume: 0, concrete: 0, rebarT: 0, rebarCost: 0, carbon: 0, fwM2: 0, fwCost: 0, brickM2: 0, brickPcs: 0, brickCost: 0 };
+                    return groups[label] ??= { label, sortKey, volume: 0, concrete: 0, rebarT: 0, rebarCost: 0, carbon: 0, concreteC: 0, rebarC: 0, fwC: 0, brickC: 0, fwM2: 0, fwCost: 0, brickM2: 0, brickPcs: 0, brickCost: 0 };
                 };
                 if (key === 'bricks') {
                     if (!zoneRates) continue;
                     const b = brickOf(l, { ...zoneRates.brick, brick_price: zoneRates.brick.brick_price * rateIndex('brick').ratio });
                     const g = groupOf();
-                    g.brickM2 += b.m2; g.brickPcs += b.pieces; g.brickCost += b.cost;
+                    g.brickM2 += b.m2; g.brickPcs += b.pieces; g.brickCost += b.cost; g.brickC += b.kg / 1000;
                     if (b.assumedHalf && b.m2) brickHalf = true;
                     continue;
                 }
@@ -2155,13 +2180,16 @@
                 if (zoneRates) {
                     const f = formworkOf(key, l, zoneRates.formwork);
                     g.fwM2 += f.m2; g.fwCost += f.m2 * zoneRates.formwork.price * rateIndex('formwork').ratio;
+                    g.fwC += f.m2 * (zoneRates.formwork.carbon?.per_m2 || 0) / 1000;
                     if (f.est && f.m2) fwEst = true;
                 }
                 g.volume += volume;
                 g.concrete += volume * priceFor({ grade }, data.prices);
                 g.rebarT += rebarT;
                 g.rebarCost += rb ? rebarT * rb.price : 0;
-                g.carbon += volume * ((cf[grade] ?? cf['280'])?.factor || 0) / 1000 + (rb?.carbon ? rebarT * rb.carbon.factor : 0);
+                g.concreteC += volume * ((cf[grade] ?? cf['280'])?.factor || 0) / 1000;
+                g.rebarC += rb?.carbon ? rebarT * rb.carbon.factor : 0;
+                g.carbon = g.concreteC + g.rebarC;
             }
             const rows = Object.values(groups).sort((a, b) => {
                 if (group === 'category') return a.sortKey - b.sortKey;
@@ -2207,20 +2235,16 @@
                 showBrick && { h: '紅磚 塊', right: true, cls: 'text-rose-400', v: r => num(r.brickPcs) },
                 showBrick && { h: '磚牆', right: true, v: r => nt(r.brickCost) },
                 (outputs.concrete || showRebar || showFw || showBrick) && { h: '小計', right: true, cls: 'text-amber-300 font-semibold', v: r => nt(subtotal(r)) },
-                outputs.carbon && { h: 'tCO₂e', right: true, cls: 'text-emerald-400', v: r => r.carbon.toFixed(1) },
+                outputs.carbon && { h: 'tCO₂e', right: true, cls: 'text-emerald-400', v: r => (r.concreteC + (showRebar ? r.rebarC : 0) + (showFw ? r.fwC : 0) + (showBrick ? r.brickC : 0)).toFixed(1) },
             ].filter(Boolean);
-            // 碳排只算勾選的材料：沒勾鋼筋時扣掉鋼筋碳排
-            if (outputs.carbon && !showRebar && hasRebar) {
-                const rb = data.rebar_official || data.rebar;
-                cols[cols.length - 1].v = r => (r.carbon - (rb?.carbon ? r.rebarT * rb.carbon.factor : 0)).toFixed(1);
-            }
             const td = (c, x) => `<td class="p-2.5 ${c.right ? 'text-right font-mono' : ''} ${c.cls || ''}">${c.v(x)}</td>`;
             document.getElementById('zone-head').innerHTML = `<tr>${cols.map(c => `<th class="p-2.5 ${c.right ? 'text-right' : ''}">${c.h}</th>`).join('')}</tr>`;
             document.getElementById('zone-body').innerHTML = rows.map(r => `<tr class="hover:bg-dark-hover transition">${cols.map(c => td(c, r)).join('')}</tr>`).join('');
-            const SUM_KEYS = ['volume', 'concrete', 'rebarT', 'rebarCost', 'carbon', 'fwM2', 'fwCost', 'brickM2', 'brickPcs', 'brickCost'];
+            const SUM_KEYS = ['volume', 'concrete', 'rebarT', 'rebarCost', 'carbon', 'concreteC', 'rebarC', 'fwC', 'brickC', 'fwM2', 'fwCost', 'brickM2', 'brickPcs', 'brickCost'];
             const total = rows.reduce((t, r) => { for (const k of SUM_KEYS) t[k] += r[k]; return t; },
                 { label: '合計', ...Object.fromEntries(SUM_KEYS.map(k => [k, 0])) });
-            zoneExtra = { formwork: showFw ? total.fwCost : 0, brick: showBrick ? total.brickCost : 0 };
+            zoneExtra = { formwork: showFw ? total.fwCost : 0, brick: showBrick ? total.brickCost : 0,
+                fwM2: total.fwM2, fwC: showFw ? total.fwC : 0, brickPcs: total.brickPcs, brickM2: total.brickM2, brickC: showBrick ? total.brickC : 0 };
             renderCostKpi();
             document.getElementById('zone-foot').innerHTML = rows.length > 1 ? `<tr>${cols.map(c => td(c, total)).join('')}</tr>` : '';
 
@@ -2242,7 +2266,7 @@
                     : `${label}單價未依指數調整（${r.missingBase ? '指數沒有基準月份' : '尚無指數資料'}）`;
             };
             if (showFw || showBrick) notes.push([showFw && idxNote('formwork', '模板', zoneRates.formwork.price, 'm²'), showBrick && idxNote('brick', '紅磚', zoneRates.brick.brick_price, '塊')].filter(Boolean).join('；')
-                + '。基準價見 data/rates.json，碳排尚未包含模板與磚。');
+                + '。基準價見 data/rates.json。');
             notes.push('碳排只含勾選的材料；單價、鋼筋比、係數與下方各區相同。');
             document.getElementById('zone-note').innerText = notes.join(' ');
         }
