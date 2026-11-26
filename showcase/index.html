@@ -294,7 +294,7 @@ function boxAt(parent, x0, y0, x1, y1, z0, z1, mat, edgeMat = M.edge) {
   return m;
 }
 
-/* 地面、衛星影像、周邊建物（OpenStreetMap） */
+/* 地面、周邊建物、道路與綠地（OpenStreetMap） */
 // 基地在校園座標中的位置（估計）：建築西北角在南港高工中心往西 126 m、往南 43.5 m，
 // 校舍軸線較正北偏約 12°。要微調位置改這三個數字。
 const SITE = { nwX: -126.0, nwY: 43.5, rot: 0.2075 };
@@ -302,7 +302,7 @@ const CU = [Math.cos(SITE.rot), -Math.sin(SITE.rot)], CV = [Math.sin(SITE.rot), 
 const EAST = new THREE.Vector3(CU[0], 0, CV[0]), NORTH = new THREE.Vector3(-CU[1], 0, -CV[1]);
 const world = new THREE.Group(); scene.add(world);
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), M.ground);
-ground.rotation.x = -Math.PI / 2; ground.position.y = -0.3; ground.receiveShadow = true; world.add(ground);
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.3; ground.receiveShadow = true; ground.renderOrder = -10; world.add(ground);
 function flat(parent, x0, y0, x1, y1, mat, h = 0.02) {
   const [ax, az] = P(x0, y0), [bx, bz] = P(x1, y1);
   const m = new THREE.Mesh(new THREE.PlaneGeometry(bx - ax, bz - az), mat);
@@ -334,37 +334,56 @@ fetch('context.txt').then(r => r.text()).then(txt => {
 const southF = new THREE.Group(); world.add(southF);
 boxAt(southF, -2, 35.75, 62, 52, 0, 13, M.ctx, M.ctxEdge);
 
-// 衛星影像（Esri World Imagery，瀏覽器執行時載入；離線時只顯示素色地面）
-const LAT0 = 25.0569028, LON0 = 121.6085676, KX = 111320 * Math.cos(LAT0 * Math.PI / 180), KY = 110574;
-const satMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
-function loadSat(z, halfM, yOff) {
-  const n = 2 ** z, tx = lon => (lon + 180) / 360 * n, ty = lat => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n; };
-  const x0 = Math.floor(tx(LON0 - halfM / KX)), x1 = Math.floor(tx(LON0 + halfM / KX)), y0 = Math.floor(ty(LAT0 + halfM / KY)), y1 = Math.floor(ty(LAT0 - halfM / KY));
-  const W = (x1 - x0 + 1) * 256, Hh = (y1 - y0 + 1) * 256;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; const g = cv.getContext('2d');
-  const lonOf = x => x / n * 360 - 180, latOf = y => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
-  const X0 = (lonOf(x0) - LON0) * KX, X1 = (lonOf(x1 + 1) - LON0) * KX, Y0 = -(latOf(y0) - LAT0) * KY, Y1 = -(latOf(y1 + 1) - LAT0) * KY;
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const mat = satMat.clone(); mat.map = tex; satMats.push(mat);
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Y1 - Y0), mat);
-  m.rotation.x = -Math.PI / 2; m.position.set((X0 + X1) / 2, yOff, (Y0 + Y1) / 2); m.receiveShadow = true; m.renderOrder = z === 17 ? -2 : -1; city.add(m);
-  let left = (x1 - x0 + 1) * (y1 - y0 + 1), ok = 0;
-  const done = () => { if (--left) return; if (!ok) return;
-    // 邊緣淡出
-    const rg = g.createRadialGradient(W / 2, Hh / 2, Math.min(W, Hh) * 0.3, W / 2, Hh / 2, Math.min(W, Hh) * 0.5);
-    rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
-    g.globalCompositeOperation = 'destination-in'; g.fillStyle = rg; g.fillRect(0, 0, W, Hh);
-    tex.needsUpdate = true; mat.opacity = 1; };
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
-    const im = new Image(); im.crossOrigin = 'anonymous';
-    im.onload = () => { g.drawImage(im, (x - x0) * 256, (y - y0) * 256); ok++; done(); };
-    im.onerror = done;
-    im.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+// 道路與綠地（OpenStreetMap，白模風格；平面分層用 renderOrder 排序、不寫深度，避免閃爍）
+const GM = {
+  road: new THREE.MeshLambertMaterial({ color: 0xfbfbf8, depthWrite: false, side: THREE.DoubleSide }),
+  green: new THREE.MeshLambertMaterial({ color: 0xd2dcc3, depthWrite: false, side: THREE.DoubleSide }),
+  pitch: new THREE.MeshLambertMaterial({ color: 0xddd8ca, depthWrite: false, side: THREE.DoubleSide }),
+  water: new THREE.MeshLambertMaterial({ color: 0xc5d5df, depthWrite: false, side: THREE.DoubleSide }),
+  deck: new THREE.MeshLambertMaterial({ color: 0xf6f6f2, side: THREE.DoubleSide }),
+};
+function flatMesh(pos, mat, h, order) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat); m.position.y = h; m.renderOrder = order; m.receiveShadow = true; city.add(m); return m;
+}
+function ribbon(out, pts, w, y = 0) {
+  const r = w / 2;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x0, z0] = pts[i], [x1, z1] = pts[i + 1], L = Math.hypot(x1 - x0, z1 - z0) || 1;
+    const nx = -(z1 - z0) / L * r, nz = (x1 - x0) / L * r;
+    out.push(x0 + nx, y, z0 + nz, x1 + nx, y, z1 + nz, x1 - nx, y, z1 - nz, x0 + nx, y, z0 + nz, x1 - nx, y, z1 - nz, x0 - nx, y, z0 - nz);
+  }
+  for (const [x, z] of pts) for (let k = 0; k < 10; k++) { // 轉角補圓
+    const a0 = k / 10 * Math.PI * 2, a1 = (k + 1) / 10 * Math.PI * 2;
+    out.push(x, y, z, x + Math.cos(a0) * r, y, z + Math.sin(a0) * r, x + Math.cos(a1) * r, y, z + Math.sin(a1) * r);
   }
 }
-const satMats = [];
-loadSat(17, 900, -0.2);
-loadSat(18, 330, -0.1);
+const parseXY = s => { const n = s.trim().split(/\s+/).map(Number), p = []; for (let i = 0; i < n.length; i += 2) p.push([n[i], n[i + 1]]); return p; };
+const lines = t => t.split('\n').filter(l => l.trim() && l[0] !== '#').map(l => l.split('|'));
+fetch('green.txt').then(r => r.text()).then(t => {
+  const buf = { green: [], pitch: [], water: [] };
+  for (const [k, c] of lines(t)) {
+    const pts = parseXY(c), key = /water/.test(k) ? 'water' : /pitch|track|playground/.test(k) ? 'pitch' : 'green';
+    const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+    const g = new THREE.ShapeGeometry(shape), p = g.attributes.position, idx = g.index.array;
+    for (const i of idx) buf[key].push(p.getX(i), 0, p.getY(i));
+  }
+  flatMesh(buf.green, GM.green, 0.04, -3); flatMesh(buf.pitch, GM.pitch, 0.04, -3); flatMesh(buf.water, GM.water, 0.04, -3);
+}).catch(() => { });
+fetch('roads.txt').then(r => r.text()).then(t => {
+  const flatR = [], deck = [], piers = [];
+  for (const [ws, c] of lines(t)) {
+    const w = parseFloat(ws), pts = parseXY(c);
+    if (ws.endsWith('b')) { ribbon(deck, pts, w, 0); for (let i = 0; i < pts.length - 1; i++) { const [x0, z0] = pts[i], [x1, z1] = pts[i + 1], n = Math.floor(Math.hypot(x1 - x0, z1 - z0) / 35); for (let j = 0; j <= n; j++) piers.push([x0 + (x1 - x0) * j / Math.max(n, 1), z0 + (z1 - z0) * j / Math.max(n, 1)]); } }
+    else ribbon(flatR, pts, w);
+  }
+  flatMesh(flatR, GM.road, 0.08, -2);
+  const d = flatMesh(deck, GM.deck, 8, 0); d.castShadow = true;
+  const pg = new THREE.BoxGeometry(1.6, 8, 1.6), pm = new THREE.InstancedMesh(pg, M.ctx, piers.length), m4 = new THREE.Matrix4();
+  piers.forEach(([x, z], i) => pm.setMatrixAt(i, m4.makeTranslation(x, 4, z))); pm.castShadow = true; city.add(pm);
+}).catch(() => { });
 
 /* 樹 */
 const trees = new THREE.Group(); world.add(trees);
@@ -566,7 +585,8 @@ function applyPalette() {
   M.win.color.set(p.win); M.win.emissive.set(p.winE); M.win.emissiveIntensity = night ? 1.3 : 0;
   M.edge.color.set(p.edge); M.ctxEdge.color.set(p.ctxEdge);
   hemi.intensity = p.hemi; sun.intensity = p.sun;
-  for (const m of satMats) m.color.set(night ? 0x4a4f58 : 0xf2f2ee);
+  GM.road.color.set(night ? 0x2c3035 : 0xfbfbf8); GM.deck.color.set(night ? 0x30343a : 0xf6f6f2); GM.green.color.set(night ? 0x1f2a22 : 0xd2dcc3);
+  GM.pitch.color.set(night ? 0x26292d : 0xddd8ca); GM.water.color.set(night ? 0x1c2630 : 0xc5d5df);
   hemi.groundColor.set(night ? 0x202326 : 0xcfcfc6);
 }
 function setTheme(t) { theme = t; root.dataset.theme = t; try { localStorage.setItem('showcase-theme', t); } catch { } applyPalette(); }
@@ -794,7 +814,7 @@ CH.forEach((c, i) => {
   b.innerHTML = `<span class="n">${String(i).padStart(2, '0')}</span><span class="t">${c.k}</span><span class="pg"></span>`;
   b.onclick = () => { go(i); poke(); }; nav.appendChild(b);
 });
-document.getElementById('srcnote').textContent = `模型：G3 量體（LOD 100，2026-11-23 Dynamo 自動建模）｜周邊建物 © OpenStreetMap 貢獻者｜影像 Esri, Maxar, Earthstar Geographics｜成本：結構練習模型 ${V.version}，${PRICE_MONTH} 單價`;
+document.getElementById('srcnote').textContent = `模型：G3 量體（LOD 100，2026-11-23 Dynamo 自動建模）｜周邊建物、道路、綠地 © OpenStreetMap 貢獻者｜成本：結構練習模型 ${V.version}，${PRICE_MONTH} 單價`;
 
 let cur = -1, bldAlpha = 1, bldTarget = 1, explodeT = 0, explodeTarget = 0, sunAnim = null, sunHour = 6;
 function setOpacity(mats, o) { for (const m of mats) { m.transparent = o < 1; m.opacity = o; m.depthWrite = o >= 1; } }

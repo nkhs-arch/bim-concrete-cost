@@ -11,7 +11,7 @@
 章節式互動展示：基地分析（日照、風、微氣候、太陽能、三量體比選）＋成本系統（混凝土、鋼筋、單價走勢、碳排、版本比較）。←／→ 或空白鍵換章、F 全螢幕、可自動播放（閒置 60 秒自動開始），平板可在文字區左右滑動。
 
 - 3D 量體讀 `showcase/g3_data.json`（G3 Dynamo 自動建模資料），模型改版時換掉這個檔案即可
-- 周邊建物 `showcase/context.txt` 來自 OpenStreetMap；地面衛星影像由瀏覽器即時載入 Esri World Imagery（離線時顯示素色地面）
+- 周邊建物 `showcase/context.txt`、道路 `showcase/roads.txt`、綠地 `showcase/green.txt` 都來自 OpenStreetMap（校園座標，原點南港高工中心），白模風格，不用衛星圖
 - 基地在校園中的位置是估計值，寫在 `showcase/index.html` 的 `SITE`（西北角座標與旋轉角）
 - 成本數字直接讀根目錄的 `data.json`，會跟著每週自動更新
 - Forma 分析截圖在 `showcase/img/`
