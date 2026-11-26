@@ -443,7 +443,9 @@ def extra_indices(root):
         for name in names:
             item = name if name in by_item else next((i for i in by_item if name in i), None)
             if item:
-                found[key] = {"name": item, "series": by_item[item]}
+                # 「(三)磚瓦瓷類(指數基期：民國110年=100)」→「磚瓦瓷類」
+                label = re.sub(r"^\([一二三四五六七八九十]+\)|\(指數基期.*\)$", "", item).strip()
+                found[key] = {"name": label or item, "series": by_item[item]}
                 break
     if len(found) < len(EXTRA_INDEX_ITEMS):
         log("INFO", "物價指數檔裡有的項目：" + "、".join(by_item))
