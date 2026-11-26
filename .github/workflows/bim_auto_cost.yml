@@ -9,6 +9,7 @@ on:
       - 'data/quantities.*'
       - 'data/model_info.json'
       - 'data/rebar.json'
+      - 'data/carbon_lebr.json'
       - 'data/changelog.json'
       - 'scripts/**'
 

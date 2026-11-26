@@ -16,10 +16,10 @@ BIM 混凝土成本自動估算：把 Forma Takeoff 匯出的體積 × 最新單
   鋼筋重量 = 各類型體積 × 鋼筋比，再加損耗＋搭接
   單價 = 工程會「大宗資材之鋼筋價格調查」基準價 × 主計總處「金屬製品類」指數調整
 
-碳排（6D 永續，自動下載）：
-  環境部「碳足跡排放係數」開放資料，取各強度「預拌混凝土」最新公告的係數（kgCO2e/m³）
-  蘊含碳 = 體積 × 係數
-  鋼筋另取同規格（例如 SD420W）鋼筋最新公告的係數（kgCO2e/kg），× 含損耗的鋼筋重量
+碳排（6D 永續）：
+  預設採用建研所《低碳（低蘊含碳）建築評估手冊》（LEBR）附錄一 P-LCC 2022 係數（data/carbon_lebr.json）
+  蘊含碳 = 體積 × 各強度預拌混凝土係數（kgCO2e/m³）＋ 含損耗的鋼筋重量 × 鋼筋係數（kgCO2e/kg）
+  設環境變數 CARBON_SOURCE=moenv 可改回環境部「碳足跡排放係數」開放資料
 
 自動維護（不要手動改）：
   versions.json      ← 偵測到 quantities 內容變動時，自動新增一個版本
@@ -51,6 +51,7 @@ DATA_DIR = os.path.join(ROOT, "data")
 OUTPUT_FILE = os.path.join(ROOT, "data.json")
 CACHE_FILE = os.path.join(DATA_DIR, "price_cache.json")
 CARBON_CACHE_FILE = os.path.join(DATA_DIR, "carbon_cache.json")
+LEBR_FILE = os.path.join(DATA_DIR, "carbon_lebr.json")  # 建研所 LEBR 碳排係數（預設）
 
 TW = timezone(timedelta(hours=8))
 
@@ -646,7 +647,10 @@ def pick_rebar_factor(rows, spec):
 
 
 def load_carbon_factors(rebar_spec):
-    """回傳 (混凝土各強度係數, 鋼筋係數或 None)。"""
+    """回傳 (混凝土各強度係數, 鋼筋係數或 None)。
+    預設用建研所 LEBR 的係數（data/carbon_lebr.json）；環境變數 CARBON_SOURCE=moenv 時改用環境部開放資料。"""
+    if os.environ.get("CARBON_SOURCE", "lebr").lower() != "moenv":
+        return load_lebr_factors()
     try:
         factors, rebar = fetch_carbon_factors(rebar_spec)
         with open(CARBON_CACHE_FILE, "w", encoding="utf-8") as f:
@@ -665,6 +669,17 @@ def load_carbon_factors(rebar_spec):
         log("CARBON", f"環境部碳足跡係數 {rebar['name']} = {rebar['factor']} kgCO2e/kg（{rebar['year']} 年公告）")
     else:
         log("WARN", "碳足跡係數檔裡找不到鋼筋，鋼筋碳排不計")
+    return factors, rebar
+
+
+def load_lebr_factors():
+    with open(LEBR_FILE, encoding="utf-8") as f:
+        lebr = json.load(f)
+    src, year = lebr["source"], lebr["year"]
+    factors = {g: {"factor": c["factor"], "year": year, "source": src, "psi": c["psi"]} for g, c in lebr["concrete"].items()}
+    rebar = {**lebr["rebar"], "year": year, "source": src}
+    log("CARBON", f"建研所 LEBR 係數 280 kgf（{factors[DEFAULT_GRADE]['psi']} psi）= {factors[DEFAULT_GRADE]['factor']} kgCO2e/m³、"
+                  f"{rebar['name']} = {rebar['factor']} kgCO2e/kg（{src}）")
     return factors, rebar
 
 

@@ -420,7 +420,7 @@
                     <h3 class="text-sm font-semibold text-white flex items-center">
                         <i class="fa-solid fa-leaf mr-2 text-emerald-400"></i>6D 永續：<span id="carbon-title">混凝土</span>蘊含碳排放
                     </h3>
-                    <p class="text-xs text-slate-400">數量 × 環境部碳足跡排放係數，評估方式參照建研所《低碳（低蘊含碳）建築評估手冊》（LEBR）</p>
+                    <p class="text-xs text-slate-400">數量 × 碳排係數，統一採用內政部建研所《低碳（低蘊含碳）建築評估手冊》（LEBR）附錄一 ABRI 初級資材碳排資料庫（P-LCC, 2022）</p>
                 </div>
                 <span class="text-xs font-mono text-slate-400" id="carbon-version">--</span>
             </div>
@@ -883,7 +883,7 @@
                     <td class="p-2.5 text-right">${Math.round(r.total * 1000 / (r.v.total_volume || 1))}</td>
                 </tr>`;
             }).join('');
-            document.getElementById('carbon-versions-note').innerText = '各版本都用同一組環境部係數計算，方便比較設計變更造成的碳排差異。'
+            document.getElementById('carbon-versions-note').innerText = '各版本都用同一組係數計算，方便比較設計變更造成的碳排差異。'
                 + (partial ? '「*」表示兩版之中有一版沒有鋼筋資料，只比較混凝土。' : '');
 
             if (carbonVersionChart) carbonVersionChart.destroy();
@@ -981,11 +981,13 @@
 
             const used = [...new Set(keys.map(k => v.elements[k].grade))].map(g => {
                 const f = factors[g] ?? factors['280'];
-                return `${factors[g] ? g : '280'} kgf ${f.factor}（${f.source}，${f.year} 年公告）`;
+                return f.psi ? `${factors[g] ? g : '280'} kgf（${f.psi} psi）${f.factor}` : `${factors[g] ? g : '280'} kgf ${f.factor}（${f.source}，${f.year} 年公告）`;
             });
+            const lebr = Object.values(factors).some(f => f.psi);
             document.getElementById('carbon-note').innerText =
-                `環境部「碳足跡排放係數」開放資料，預拌混凝土 ${used.join('；')}`
-                + (rc ? `；${rc.name} ${rc.factor} kgCO₂e/kg（${rc.source}，${rc.year} 年公告）` : '');
+                (lebr ? `${Object.values(factors)[0].source}，A1～A4（原料開採、運輸、生產、成品運輸）；預拌混凝土 ${used.join('；')} kgCO₂e/m³`
+                      : `環境部「碳足跡排放係數」開放資料，預拌混凝土 ${used.join('；')}`)
+                + (rc ? (lebr ? `；${rc.name} ${rc.factor} kgCO₂e/kg` : `；${rc.name} ${rc.factor} kgCO₂e/kg（${rc.source}，${rc.year} 年公告）`) : '');
         }
 
         function renderRebar() {
