@@ -65,8 +65,8 @@ REBAR_INDEX_ITEM = "金屬製品類"
 # 模板與磚沒有政府公布的單價，用 data/rates.json 的基準價 × 主計總處個別項目指數調整。
 # 先找個別項目，指數檔沒有個別項目時退回所屬的中分類
 EXTRA_INDEX_ITEMS = {
-    "formwork": ["普通模板", "木材及其製品類"],
-    "brick": ["瓦片及紅磚", "磚瓦瓷類"],
+    "formwork": ["普通模板", "木材及其製品類", "木材"],
+    "brick": ["瓦片及紅磚", "紅磚", "磚瓦瓷類", "磚"],
 }
 # 預設 api_key 是政府資料開放平臺（data.gov.tw/dataset/28176）公開的共用金鑰，每天全部使用者合計只能呼叫 5000 次，
 # 常常被用完；到 data.moenv.gov.tw 註冊自己的金鑰後，設成環境變數 MOENV_API_KEY（GitHub 放在 Secrets）就會改用自己的
@@ -428,20 +428,25 @@ def fetch_price_indices():
 
 def extra_indices(root):
     """模板、紅磚用的指數：{"formwork": {"name": "普通模板", "series": {...}}, ...}，找不到的略過。"""
+    # 指數檔的項目名稱可能帶編號（例如「11.瓦片及紅磚」），所以先比完全相同，再比「包含」
+    by_item = {}
+    for obs in root.iter("Obs"):
+        if obs.findtext("TYPE") != "原始值":
+            continue
+        item = (obs.findtext("Item") or "").strip()
+        value = (obs.findtext("Item_VALUE") or "").strip()
+        if item and value:
+            y, m = obs.findtext("TIME_PERIOD").split("M")
+            by_item.setdefault(item, {})[f"{y}-{m}"] = float(value)
     found = {}
     for key, names in EXTRA_INDEX_ITEMS.items():
         for name in names:
-            series = {}
-            for obs in root.iter("Obs"):
-                if obs.findtext("TYPE") != "原始值" or (obs.findtext("Item") or "").strip() != name:
-                    continue
-                value = (obs.findtext("Item_VALUE") or "").strip()
-                if value:
-                    y, m = obs.findtext("TIME_PERIOD").split("M")
-                    series[f"{y}-{m}"] = float(value)
-            if series:
-                found[key] = {"name": name, "series": series}
+            item = name if name in by_item else next((i for i in by_item if name in i), None)
+            if item:
+                found[key] = {"name": item, "series": by_item[item]}
                 break
+    if len(found) < len(EXTRA_INDEX_ITEMS):
+        log("INFO", "物價指數檔裡有的項目：" + "、".join(by_item))
     return found
 
 
