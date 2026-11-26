@@ -975,7 +975,7 @@
 
             document.getElementById('carbon-scope').innerText = rc
                 ? `鋼筋以含 ${Math.round(data.rebar.loss_rate * 100)}% 損耗搭接的採購量計算。`
-                    + (ex.fwC || ex.brickC ? `模板、磚的數量來自「計算成果與分區」（取消勾選就不算）。${[ex.fwC && fwF.note, ex.brickC && brF.note].filter(Boolean).join('；')}。` : '模板、磚在「計算成果與分區」勾選後才會列入。')
+                    + (ex.fwC || ex.brickC ? `模板、磚的數量來自「計算成果與分區」。${[ex.fwC && fwF.note, ex.brickC && brF.note].filter(Boolean).join('；')}。` : '')
                     + '尚未含施工機具與運輸。'
                 : (data.rebar ? '此版本沒有鋼筋資料（舊模型無類型資料），只算混凝土。' : '目前只算混凝土材料，尚未含鋼筋、模板與施工機具的碳排。');
 
@@ -2237,7 +2237,14 @@
                 showBrick && { h: '紅磚 塊', right: true, cls: 'text-rose-400', v: r => num(r.brickPcs) },
                 showBrick && { h: '磚牆', right: true, v: r => nt(r.brickCost) },
                 (outputs.concrete || showRebar || showFw || showBrick) && { h: '小計', right: true, cls: 'text-amber-300 font-semibold', v: r => nt(subtotal(r)) },
-                outputs.carbon && { h: 'tCO₂e', right: true, cls: 'text-emerald-400', v: r => (r.concreteC + (showRebar ? r.rebarC : 0) + (showFw ? r.fwC : 0) + (showBrick ? r.brickC : 0)).toFixed(1) },
+                // 碳排：勾「碳排放」就把四種材料分開列，最後加總（不受上面成本勾選影響）
+                ...(outputs.carbon ? [
+                    { h: '混凝土 tCO₂e', right: true, cls: 'text-emerald-400', v: r => r.concreteC.toFixed(1) },
+                    hasRebar && { h: '鋼筋 tCO₂e', right: true, cls: 'text-emerald-400', v: r => r.rebarC.toFixed(1) },
+                    zoneRates && { h: '模板 tCO₂e', right: true, cls: 'text-emerald-400', v: r => r.fwC.toFixed(1) },
+                    zoneRates && hasBrick && { h: '磚 tCO₂e', right: true, cls: 'text-emerald-400', v: r => r.brickC.toFixed(1) },
+                    { h: '碳排合計', right: true, cls: 'text-emerald-300 font-semibold', v: r => (r.concreteC + (hasRebar ? r.rebarC : 0) + (zoneRates ? r.fwC : 0) + (hasBrick ? r.brickC : 0)).toFixed(1) },
+                ] : []),
             ].filter(Boolean);
             const td = (c, x) => `<td class="p-2.5 ${c.right ? 'text-right font-mono' : ''} ${c.cls || ''}">${c.v(x)}</td>`;
             document.getElementById('zone-head').innerHTML = `<tr>${cols.map(c => `<th class="p-2.5 ${c.right ? 'text-right' : ''}">${c.h}</th>`).join('')}</tr>`;
@@ -2246,7 +2253,7 @@
             const total = rows.reduce((t, r) => { for (const k of SUM_KEYS) t[k] += r[k]; return t; },
                 { label: '合計', ...Object.fromEntries(SUM_KEYS.map(k => [k, 0])) });
             zoneExtra = { formwork: showFw ? total.fwCost : 0, brick: showBrick ? total.brickCost : 0,
-                fwM2: total.fwM2, fwC: showFw ? total.fwC : 0, brickPcs: total.brickPcs, brickM2: total.brickM2, brickC: showBrick ? total.brickC : 0 };
+                fwM2: total.fwM2, fwC: zoneRates ? total.fwC : 0, brickPcs: total.brickPcs, brickM2: total.brickM2, brickC: zoneRates ? total.brickC : 0 };
             renderCostKpi();
             document.getElementById('zone-foot').innerHTML = rows.length > 1 ? `<tr>${cols.map(c => td(c, total)).join('')}</tr>` : '';
 
@@ -2269,7 +2276,7 @@
             };
             if (showFw || showBrick) notes.push([showFw && idxNote('formwork', '模板', zoneRates.formwork.price, 'm²'), showBrick && idxNote('brick', '紅磚', zoneRates.brick.brick_price, '塊')].filter(Boolean).join('；')
                 + '。基準價見 data/rates.json。');
-            notes.push('碳排只含勾選的材料；單價、鋼筋比、係數與下方各區相同。');
+            notes.push(`碳排分列混凝土、鋼筋、模板、磚再加總，係數採建研所 LEBR 2025 年版（模板、磚的碳排不受上面成本勾選影響）；單價、鋼筋比與下方各區相同。`);
             document.getElementById('zone-note').innerText = notes.join(' ');
         }
 
