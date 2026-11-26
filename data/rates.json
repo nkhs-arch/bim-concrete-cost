@@ -1,0 +1,21 @@
+{
+  "_說明": "模板與磚牆的單價、用量。單價是練習假設（參考市場行情，非政府資料），正式使用請換成工程會或公共工程價格資料庫的單價。改這個檔案後網頁會直接套用。",
+  "formwork": {
+    "price": 950,
+    "price_note": "一般模板（含工料）NT$ / m²，市場行情約 800～1,100",
+    "slab_thickness_cm": 15,
+    "slab_note": "梁側模扣掉樓板厚度（被板蓋住的那段不用模板）",
+    "fallback_ratio": { "beams": 9, "columns": 7, "floors": 6.7, "walls": 13 },
+    "fallback_note": "沒有類型尺寸也沒有面積時，用每 m³ 混凝土的模板面積經驗值估算（m²/m³）"
+  },
+  "brick": {
+    "half": { "label": "1/2B（12 cm）", "pieces": 64, "mortar_m3": 0.027 },
+    "full": { "label": "1B（24 cm）", "pieces": 128, "mortar_m3": 0.06 },
+    "full_from_cm": 20,
+    "loss_rate": 0.05,
+    "brick_price": 6.5,
+    "mortar_price": 3000,
+    "labor_per_m2": 600,
+    "price_note": "紅磚 NT$ 6.5 / 塊、1:3 水泥砂漿 NT$ 3,000 / m³、砌磚工資 NT$ 600 / m²，皆為市場行情參考；損耗 5%"
+  }
+}

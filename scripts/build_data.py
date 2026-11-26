@@ -194,8 +194,14 @@ def pick(row, field):
     return None
 
 
+# 磚牆只有面積，成本在網頁的「計算成果與分區」算，這裡不當混凝土
+BRICK_WORDS = ["磚", "砖", "brick", "masonry"]
+
+
 def classify(category):
     text = (category or "").lower()
+    if any(w in text for w in BRICK_WORDS):
+        return None
     for key, words in CATEGORY_KEYWORDS.items():
         if any(w in text for w in words):
             return key

@@ -617,6 +617,7 @@
 
             setupUpload();
             setupZones();
+            await loadRates();
             setupHome();
             // 網址後面有 #project=… 就直接開那個專案（重新整理不會跳回主畫面），否則先顯示主畫面
             const id = new URLSearchParams(location.hash.slice(1)).get('project');
@@ -927,9 +928,14 @@
             item: ['行項名稱', '行項目名稱', '行项名称', '行项目名称', 'Item name'],
             type: ['類型', '族群與類型', '类型', '族与类型', 'Type', 'Family and Type'],
             level: ['樓層', '參考樓層', '基準樓層', '位置', '楼层', '标高', 'Level', 'Reference Level', 'Base Level'],
+            area: ['面積 (M2)', '面積', '面積(m2)', '面積 (m²)', '面积 (M2)', '面积', 'Area (M2)', 'Area'],
+            length: ['長度 (M)', '長度', '长度 (M)', '长度', 'Length (M)', 'Length'],
         };
         const VOLUME_ITEMS = ['體積', '体积', 'volume'];
+        const AREA_ITEMS = ['面積', '面积', 'area'];
+        // 順序有關係：「磚牆」要先判成磚，才不會被當成 RC 牆
         const CATEGORY_KEYWORDS = {
+            bricks: ['磚', '砖', 'brick', 'masonry'],
             floors: ['樓板', '楼板', '板', 'floor', 'slab'],
             columns: ['柱', 'column'],
             beams: ['梁', '樑', '構架', '构架', 'framing', 'beam'],
@@ -1033,22 +1039,26 @@
                 if (!key) continue;
                 const spec = pick(row, 'spec') || '';
                 const grade = parseGrade(spec) || String(grades[key] ?? '280');
-                const el = elements[key] ??= { volume: 0, count: 0, grade, spec: esc(spec) || `${grade} kgf/cm² 預拌混凝土` };
                 const volume = toNumber(pick(row, 'volume'));
                 const count = Math.trunc(toNumber(pick(row, 'count') ?? '1'));
+                const area = toNumber(pick(row, 'area')), length = toNumber(pick(row, 'length'));
+                const type = normalizeType(pick(row, 'type'));
+                const level = pick(row, 'level') || '';
+                // 下載用：同一類別、樓層、類型合併成一列，格式跟 Revit 明細表一樣
+                const line = lines[[category, level, type].join('|')] ??= { category, level, type, spec, count: 0, volume: 0, area: 0, length: 0 };
+                line.count += count;
+                line.volume += volume;
+                line.area += area;
+                line.length += length;
+                if (key === 'bricks') continue;   // 磚牆只算面積，不算混凝土
+                const el = elements[key] ??= { volume: 0, count: 0, grade, spec: esc(spec) || `${grade} kgf/cm² 預拌混凝土` };
                 el.volume += volume;
                 el.count += count;
-                const type = normalizeType(pick(row, 'type'));
                 const t = types[key + '|' + type] ??= { key, type, volume: 0, count: 0 };
                 t.volume += volume;
                 t.count += count;
-                // 下載用：同一類別、樓層、類型合併成一列，格式跟 Revit 明細表一樣
-                const level = pick(row, 'level') || '';
-                const line = lines[[category, level, type].join('|')] ??= { category, level, type, spec, count: 0, volume: 0 };
-                line.count += count;
-                line.volume += volume;
             }
-            if (!Object.keys(elements).length) {
+            if (!Object.keys(elements).length && !Object.keys(lines).length) {
                 throw new Error('找不到樓板、柱、梁或牆的體積。請確認第一列有「計量類型」和「體積 (M3)」這類欄位名稱。');
             }
             Object.values(elements).forEach(el => el.volume = r2(el.volume));
@@ -1069,9 +1079,11 @@
             { key: 'level', label: '樓層／區域' },
             { key: 'spec', label: '材質／強度', hint: '例如 280 kgf/cm²' },
             { key: 'item', label: '行項名稱', hint: 'Takeoff 才有' },
+            { key: 'area', label: '面積 (m²)', hint: '模板、磚牆用' },
+            { key: 'length', label: '長度 (m)', hint: '模板用' },
         ];
-        const CANON_CATEGORY = { floors: '樓板', columns: '結構柱', beams: '結構樑', walls: '牆' };
-        const KEY_LABEL = { floors: '樓板', columns: '柱', beams: '梁', walls: '牆', skip: '不計算' };
+        const CANON_CATEGORY = { floors: '樓板', columns: '結構柱', beams: '結構樑', walls: '牆', bricks: '磚牆' };
+        const KEY_LABEL = { floors: '樓板', columns: '柱', beams: '梁', walls: 'RC 牆', bricks: '磚牆', skip: '不計算' };
         const MAPPING_LOCAL_KEY = 'bim-mapping-builtin';
 
         const emptyMapping = () => ({ sheet: 0, header: 0, columns: {}, fixed: '', categories: {}, types: {}, ratios: {} });
@@ -1167,11 +1179,30 @@
             const idx = Object.fromEntries(MAP_FIELDS.map(f => [f.key, col(f.key)]));
             const ratios = ratiosWith(calc, m);
             const cats = {}, types = {}, rows = [];
-            for (const r of sh.rows.slice(m.header + 1)) {
-                const get = f => (idx[f] >= 0 ? r[idx[f]] ?? '' : '');
-                const item = get('item');
-                if (idx.item >= 0 && item && !VOLUME_ITEMS.includes(item.trim().toLowerCase())) continue;
-                const volume = toNumber(get('volume'));
+            const body = sh.rows.slice(m.header + 1);
+            const getter = r => f => (idx[f] >= 0 ? r[idx[f]] ?? '' : '');
+            const qtyIdx = header.findIndex(h => ['數量', '数量', 'Quantity'].includes(h));
+            const itemKind = r => {
+                const item = idx.item >= 0 ? String(getter(r)('item')).trim().toLowerCase() : '';
+                return !item || VOLUME_ITEMS.includes(item) ? 'volume' : AREA_ITEMS.includes(item) ? 'area' : 'other';
+            };
+            // Takeoff 每個構件有「體積」「面積」兩列。體積列本身有面積欄時用體積列的，
+            // 否則（舊版匯出、或磚牆這種只有面積的）才用面積列，避免重複
+            const volRowArea = {};
+            for (const r of body) if (itemKind(r) === 'volume') {
+                const c = getter(r)('category');
+                volRowArea[c] = (volRowArea[c] || 0) + toNumber(getter(r)('area'));
+            }
+            for (const r of body) {
+                const get = getter(r);
+                const kind = itemKind(r);
+                if (kind === 'other') continue;
+                const rawCatRaw = get('category');
+                if (kind === 'area' && volRowArea[rawCatRaw] > 0) continue;
+                const volume = kind === 'volume' ? toNumber(get('volume')) : 0;
+                const area = kind === 'area' ? (toNumber(get('area')) || toNumber(qtyIdx >= 0 ? r[qtyIdx] : 0))
+                    : (volRowArea[rawCatRaw] > 0 || idx.item < 0 ? toNumber(get('area')) : 0);
+                const length = kind === 'volume' ? toNumber(get('length')) : 0;
                 const rawCat = idx.category >= 0 ? get('category') : '';
                 const key = idx.category >= 0 ? (m.categories[rawCat] || classify(rawCat) || 'skip') : (m.fixed || 'skip');
                 if (idx.category >= 0) {
@@ -1183,7 +1214,7 @@
                 const tk = key + '|' + rawType;
                 const t = types[tk] ??= { id: tk, key, raw: rawType, volume: 0, ...autoType(key, rawType, ratios) };
                 t.volume += volume;
-                rows.push({ key, rawType, level: get('level'), spec: get('spec'), count: idx.count >= 0 ? get('count') : '1', volume });
+                rows.push({ key, rawType, level: get('level'), spec: get('spec'), count: kind === 'area' && volRowArea[rawCatRaw] === undefined ? (idx.count >= 0 ? get('count') : '1') : kind === 'area' ? '0' : (idx.count >= 0 ? get('count') : '1'), volume, area, length });
             }
             // 類型對照結果：手動指定的優先
             for (const t of Object.values(types)) {
@@ -1202,7 +1233,8 @@
             const table = rows.map(x => {
                 const t = types[x.key + '|' + x.rawType];
                 const to = t.status === 'empty' ? '' : (t.status === 'near' || t.status === 'none') ? normalizeType(x.rawType) : t.to;
-                return { '計量類型': CANON_CATEGORY[x.key], '樓層': x.level, '類型': to, '材質': x.spec, '個數': String(x.count), '體積 (M3)': String(x.volume) };
+                return { '計量類型': CANON_CATEGORY[x.key], '樓層': x.level, '類型': to, '材質': x.spec, '個數': String(x.count), '體積 (M3)': String(x.volume),
+                         '面積 (M2)': String(x.area || ''), '長度 (M)': String(x.length || '') };
             });
             return { header, cats: Object.values(cats), typeList, flagged, error, table, ratios };
         }
@@ -1242,7 +1274,7 @@
                     if (!m.columns.category) {
                         const warn = !m.fixed;
                         html += `<label class="flex items-center gap-2 mt-2 ${warn ? 'bg-amber-950/50 rounded px-1' : ''}"><span class="w-24 shrink-0 ${warn ? 'text-amber-300' : 'text-slate-300'}">整份都是</span>
-                            <select data-k="fixed" class="${sel}">${opt('', '請選擇', !m.fixed)}${['floors', 'columns', 'beams', 'walls'].map(k => opt(k, KEY_LABEL[k], k === m.fixed)).join('')}</select>
+                            <select data-k="fixed" class="${sel}">${opt('', '請選擇', !m.fixed)}${['floors', 'columns', 'beams', 'walls', 'bricks'].map(k => opt(k, KEY_LABEL[k], k === m.fixed)).join('')}</select>
                             <span class="text-slate-500">檔案沒有類別欄，例如 Revit 的單一構件明細表</span></label>`;
                     }
 
@@ -1269,7 +1301,7 @@
                             const norm = customKey(t.key, t.raw);
                             const [cls, text] = STATUS[t.status];
                             let cell;
-                            if (!keys.length) cell = '<span class="text-slate-500">此類別目前不算鋼筋</span>';
+                            if (!keys.length) cell = `<span class="text-slate-500">${t.key === 'bricks' ? '磚牆依面積計' : '此類別目前不算鋼筋'}</span>`;
                             else {
                                 const current = custom ? '#custom' : (t.status === 'none' ? '' : t.to);
                                 cell = `<select data-type="${esc(t.id)}" class="${sel}">${t.status === 'none' ? opt('', '請選擇', true) : ''}`
@@ -1619,7 +1651,7 @@
         // 存起來的明細轉回表格，再用同一套規則算
         const linesToTable = lines => lines.map(l => ({
             '計量類型': l.category, '樓層': l.level, '類型': l.type, '材質': l.spec || '',
-            '個數': String(l.count), '體積 (M3)': String(l.volume),
+            '個數': String(l.count), '體積 (M3)': String(l.volume), '面積 (M2)': String(l.area || ''), '長度 (M)': String(l.length || ''),
         }));
 
         // 一次放多個檔案（例如 Revit 的柱、梁、板明細表各一個）時合併成一個版本
@@ -1881,8 +1913,8 @@
         function downloadQuantities() {
             if (!uploaded) return;
             const cell = s => /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-            const body = uploaded.lines.map(l => [l.category, l.level, l.type, l.count, r2(l.volume)].map(x => cell(String(x))).join(','));
-            const csv = '﻿' + ['計量類型,樓層,類型,個數,體積 (M3)', ...body].join('\r\n') + '\r\n';
+            const body = uploaded.lines.map(l => [l.category, l.level, l.type, l.count, r2(l.volume), l.area ? r2(l.area) : '', l.length ? r2(l.length) : ''].map(x => cell(String(x))).join(','));
+            const csv = '﻿' + ['計量類型,樓層,類型,個數,體積 (M3),面積 (M2),長度 (M)', ...body].join('\r\n') + '\r\n';
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
             a.download = 'quantities.csv';
@@ -1896,16 +1928,58 @@
             { key: 'concrete', label: '混凝土', icon: 'fa-cube', color: 'text-cyan-400' },
             { key: 'rebar', label: '鋼筋', icon: 'fa-grip-lines', color: 'text-orange-400' },
             { key: 'carbon', label: '碳排放', icon: 'fa-leaf', color: 'text-emerald-400' },
-            { key: 'formwork', label: '模板', soon: true },
-            { key: 'brick', label: '磚（含耗材）', soon: true },
+            { key: 'formwork', label: '模板', icon: 'fa-border-all', color: 'text-sky-400' },
+            { key: 'brick', label: '磚（含耗材）', icon: 'fa-cubes-stacked', color: 'text-rose-400' },
         ];
         const OUTPUTS_KEY = 'bim-outputs';
         const ZONE_GROUP_KEY = 'bim-zone-group';
-        let zoneLines = null, zoneCalc = null;
+        let zoneLines = null, zoneCalc = null, zoneRates = null;
+
+        async function loadRates() {
+            try { zoneRates = await (await fetch('data/rates.json', { cache: 'no-store' })).json(); } catch { zoneRates = null; }
+        }
+
+        // 模板面積（m²）：梁、柱用類型尺寸推算，板、牆有面積欄就直接用；都沒有時用經驗值（est）
+        function formworkOf(key, l, fw) {
+            const v = toNumber(l.volume), area = toNumber(l.area), len = toNumber(l.length);
+            const d = parseDims(key, l.type)?.dims?.map(x => x / 100);
+            const est = () => ({ m2: v * (fw.fallback_ratio[key] || 0), est: true });
+            if (key === 'beams') {
+                if (!d || d.length < 2) return est();
+                const [b, h] = d;
+                const L = len || v / (b * h);
+                return { m2: L * (b + 2 * Math.max(h - fw.slab_thickness_cm / 100, 0)), est: false };
+            }
+            if (key === 'columns') {
+                if (d && d.length >= 2) return { m2: (len || v / (d[0] * d[1])) * 2 * (d[0] + d[1]), est: false };
+                if (len && v) return { m2: len * 4 * Math.sqrt(v / len), est: false };   // 有總高度沒尺寸：當方柱
+                return est();
+            }
+            if (key === 'floors') {
+                if (area) return { m2: area, est: false };
+                return d ? { m2: v / d[0], est: false } : est();
+            }
+            if (key === 'walls') {
+                if (area) return { m2: area * 2, est: false };     // 兩面都要模板
+                return d ? { m2: 2 * v / d[0], est: false } : est();
+            }
+            return { m2: 0, est: false };
+        }
+
+        // 磚牆：面積 × 每 m² 用磚數、砂漿（依牆厚分 1/2B、1B）＋ 損耗，再加砌磚工資
+        function brickOf(l, br) {
+            const t = parseDims('walls', l.type)?.dims?.[0];
+            const area = toNumber(l.area) || (t && toNumber(l.volume) ? toNumber(l.volume) / (t / 100) : 0);
+            const spec = t && t >= br.full_from_cm ? br.full : br.half;
+            const pieces = area * spec.pieces * (1 + br.loss_rate);
+            const mortar = area * spec.mortar_m3 * (1 + br.loss_rate);
+            return { m2: area, pieces, mortar, cost: pieces * br.brick_price + mortar * br.mortar_price + area * br.labor_per_m2, assumedHalf: !t };
+        }
 
         function readOutputs() {
-            try { const v = JSON.parse(localStorage.getItem(OUTPUTS_KEY) || 'null'); if (v) return v; } catch {}
-            return { concrete: true, rebar: true, carbon: true };
+            const defaults = { concrete: true, rebar: true, carbon: true, formwork: true, brick: true };
+            try { const v = JSON.parse(localStorage.getItem(OUTPUTS_KEY) || 'null'); if (v) return { ...defaults, ...v }; } catch {}
+            return defaults;
         }
         function saveLocal(key, v) { try { localStorage.setItem(key, typeof v === 'string' ? v : JSON.stringify(v)); } catch {} }
 
@@ -1929,20 +2003,37 @@
             const rb = data.rebar_official || data.rebar;
             const cf = data.carbon_factors || {};
             const groups = {};
-            let missingRatio = false;
+            const ord = k => (k === 'bricks' ? 9 : ORDER.indexOf(k));
+            let missingRatio = false, fwEst = false, brickHalf = false;
             for (const l of lines) {
                 const key = classify(l.category);
                 if (!key) continue;
+                const level0 = String(l.level || '').trim() || '未分區';
+                const groupOf = () => {
+                    const label = group === 'all' ? '整棟' : group === 'level' ? level0
+                        : group === 'category' ? KEY_LABEL[key] : `${level0}｜${KEY_LABEL[key]}`;
+                    const sortKey = group === 'category' ? ord(key) : group === 'level-category' ? [level0, ord(key)] : level0;
+                    return groups[label] ??= { label, sortKey, volume: 0, concrete: 0, rebarT: 0, rebarCost: 0, carbon: 0, fwM2: 0, fwCost: 0, brickM2: 0, brickPcs: 0, brickCost: 0 };
+                };
+                if (key === 'bricks') {
+                    if (!zoneRates) continue;
+                    const b = brickOf(l, zoneRates.brick);
+                    const g = groupOf();
+                    g.brickM2 += b.m2; g.brickPcs += b.pieces; g.brickCost += b.cost;
+                    if (b.assumedHalf && b.m2) brickHalf = true;
+                    continue;
+                }
                 const grade = parseGrade(l.spec) || String(calc.grades?.[key] ?? '280');
                 const volume = toNumber(l.volume);
                 const ratio = calc.rebar_ratios?.[key]?.[l.type];
                 if (rb && l.type && ratio == null && Object.keys(calc.rebar_ratios?.[key] || {}).length) missingRatio = true;
                 const rebarT = rb && ratio ? volume * ratio / 1000 * (1 + rb.loss_rate) : 0;
-                const level = String(l.level || '').trim() || '未分區';
-                const label = group === 'all' ? '整棟' : group === 'level' ? level
-                    : group === 'category' ? KEY_LABEL[key] : `${level}｜${KEY_LABEL[key]}`;
-                const sortKey = group === 'category' ? ORDER.indexOf(key) : group === 'level-category' ? [level, ORDER.indexOf(key)] : level;
-                const g = groups[label] ??= { label, sortKey, volume: 0, concrete: 0, rebarT: 0, rebarCost: 0, carbon: 0 };
+                const g = groupOf();
+                if (zoneRates) {
+                    const f = formworkOf(key, l, zoneRates.formwork);
+                    g.fwM2 += f.m2; g.fwCost += f.m2 * zoneRates.formwork.price;
+                    if (f.est && f.m2) fwEst = true;
+                }
                 g.volume += volume;
                 g.concrete += volume * priceFor({ grade }, data.prices);
                 g.rebarT += rebarT;
@@ -1954,7 +2045,7 @@
                 if (group === 'level-category') return levelSort(a.sortKey[0], b.sortKey[0]) || a.sortKey[1] - b.sortKey[1];
                 return levelSort(a.sortKey, b.sortKey);
             });
-            return { rows, missingRatio, hasRebar: !!rb && lines.some(l => l.type) };
+            return { rows, missingRatio, fwEst, brickHalf, hasRebar: !!rb && lines.some(l => l.type), hasBrick: rows.some(r => r.brickM2 > 0) };
         }
 
         function renderZones() {
@@ -1975,15 +2066,24 @@
             try { group = localStorage.getItem(ZONE_GROUP_KEY) || 'level'; } catch {}
             groupSel.value = group;
 
-            const { rows, missingRatio, hasRebar } = computeZones(zoneLines, zoneCalc, group);
+            const { rows, missingRatio, fwEst, brickHalf, hasRebar, hasBrick } = computeZones(zoneLines, zoneCalc, group);
             const showRebar = outputs.rebar && hasRebar;
+            const showFw = outputs.formwork && !!zoneRates;
+            const showBrick = outputs.brick && !!zoneRates && hasBrick;
+            const num = (n, d = 0) => n.toLocaleString('en-US', { maximumFractionDigits: d });
+            const subtotal = r => (outputs.concrete ? r.concrete : 0) + (showRebar ? r.rebarCost : 0) + (showFw ? r.fwCost : 0) + (showBrick ? r.brickCost : 0);
             const cols = [
                 { h: '分區', cls: 'text-white font-medium', v: r => esc(r.label) },
                 { h: '體積 m³', right: true, cls: 'text-cyan-400', v: r => r.volume.toLocaleString('en-US', { maximumFractionDigits: 2 }) },
                 outputs.concrete && { h: '混凝土', right: true, v: r => nt(r.concrete) },
                 showRebar && { h: '鋼筋 t', right: true, cls: 'text-orange-400', v: r => r.rebarT.toFixed(1) },
                 showRebar && { h: '鋼筋', right: true, v: r => nt(r.rebarCost) },
-                (outputs.concrete || showRebar) && { h: '小計', right: true, cls: 'text-amber-300 font-semibold', v: r => nt((outputs.concrete ? r.concrete : 0) + (showRebar ? r.rebarCost : 0)) },
+                showFw && { h: '模板 m²', right: true, cls: 'text-sky-400', v: r => num(r.fwM2) },
+                showFw && { h: '模板', right: true, v: r => nt(r.fwCost) },
+                showBrick && { h: '磚牆 m²', right: true, cls: 'text-rose-400', v: r => num(r.brickM2, 1) },
+                showBrick && { h: '紅磚 塊', right: true, cls: 'text-rose-400', v: r => num(r.brickPcs) },
+                showBrick && { h: '磚牆', right: true, v: r => nt(r.brickCost) },
+                (outputs.concrete || showRebar || showFw || showBrick) && { h: '小計', right: true, cls: 'text-amber-300 font-semibold', v: r => nt(subtotal(r)) },
                 outputs.carbon && { h: 'tCO₂e', right: true, cls: 'text-emerald-400', v: r => r.carbon.toFixed(1) },
             ].filter(Boolean);
             // 碳排只算勾選的材料：沒勾鋼筋時扣掉鋼筋碳排
@@ -1994,16 +2094,24 @@
             const td = (c, x) => `<td class="p-2.5 ${c.right ? 'text-right font-mono' : ''} ${c.cls || ''}">${c.v(x)}</td>`;
             document.getElementById('zone-head').innerHTML = `<tr>${cols.map(c => `<th class="p-2.5 ${c.right ? 'text-right' : ''}">${c.h}</th>`).join('')}</tr>`;
             document.getElementById('zone-body').innerHTML = rows.map(r => `<tr class="hover:bg-dark-hover transition">${cols.map(c => td(c, r)).join('')}</tr>`).join('');
-            const total = rows.reduce((t, r) => { for (const k of ['volume', 'concrete', 'rebarT', 'rebarCost', 'carbon']) t[k] += r[k]; return t; },
-                { label: '合計', volume: 0, concrete: 0, rebarT: 0, rebarCost: 0, carbon: 0 });
+            const SUM_KEYS = ['volume', 'concrete', 'rebarT', 'rebarCost', 'carbon', 'fwM2', 'fwCost', 'brickM2', 'brickPcs', 'brickCost'];
+            const total = rows.reduce((t, r) => { for (const k of SUM_KEYS) t[k] += r[k]; return t; },
+                { label: '合計', ...Object.fromEntries(SUM_KEYS.map(k => [k, 0])) });
             document.getElementById('zone-foot').innerHTML = rows.length > 1 ? `<tr>${cols.map(c => td(c, total)).join('')}</tr>` : '';
 
             const latest = data.versions[data.versions.length - 1];
             document.getElementById('zone-model').innerText = `以目前模型 ${latest.version} 計算。`;
             const notes = [];
+            if (!zoneRates && (outputs.formwork || outputs.brick)) notes.push('讀不到 data/rates.json，模板與磚無法計算。');
             if (group.startsWith('level') && rows.some(r => r.label.startsWith('未分區'))) notes.push('「未分區」是檔案裡沒有樓層／位置資料的構件；Takeoff 匯出時可在計量套件加上「位置」或「樓層」。');
             if (showRebar && missingRatio) notes.push('有類型對不到鋼筋比，該部分鋼筋以 0 計（可按「調整欄位對照」補上）。');
             if (outputs.rebar && !hasRebar) notes.push('這個檔案沒有類型欄，算不了鋼筋。');
+            if (showFw) notes.push(`模板：梁 = 長度 ×（底寬 ＋ 2 × (梁深 − 板厚 ${zoneRates.formwork.slab_thickness_cm} cm)），長度 = 體積 ÷ 斷面；柱 = 周長 × 高度；板 = 底面積；RC 牆 = 兩面面積。${zoneRates.formwork.price_note}。`
+                + (fwEst ? `部分構件沒有類型尺寸或面積，以經驗值估算（${Object.entries(zoneRates.formwork.fallback_ratio).map(([k, v]) => `${KEY_LABEL[k]} ${v}`).join('、')} m²/m³）。` : ''));
+            if (showBrick) notes.push(`磚牆：1/2B 每 m² ${zoneRates.brick.half.pieces} 塊、砂漿 ${zoneRates.brick.half.mortar_m3} m³；1B 每 m² ${zoneRates.brick.full.pieces} 塊、砂漿 ${zoneRates.brick.full.mortar_m3} m³。${zoneRates.brick.price_note}。`
+                + (brickHalf ? '類型讀不出牆厚的磚牆以 1/2B 計。' : ''));
+            if (outputs.brick && zoneRates && !hasBrick) notes.push('這個檔案沒有磚牆（類別名稱含「磚」）。');
+            if (showFw || showBrick) notes.push('模板與磚的單價是練習假設（data/rates.json），碳排尚未包含模板與磚。');
             notes.push('碳排只含勾選的材料；單價、鋼筋比、係數與下方各區相同。');
             document.getElementById('zone-note').innerText = notes.join(' ');
         }
