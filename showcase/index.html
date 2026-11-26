@@ -231,7 +231,7 @@ const CF280 = D ? D.carbon_factors['280'].factor : 338;
 
 /* ---------- three.js 場景 ---------- */
 const stage = document.getElementById('stage');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -241,7 +241,7 @@ const labelR = new CSS2DRenderer({ element: document.getElementById('labels') })
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xebebe7, 700, 1500);
-const camera = new THREE.PerspectiveCamera(32, 1, 0.5, 6000);
+const camera = new THREE.PerspectiveCamera(32, 1, 1, 6000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI * 0.49; controls.minDistance = 25; controls.maxDistance = 1300;
@@ -302,7 +302,7 @@ const CU = [Math.cos(SITE.rot), -Math.sin(SITE.rot)], CV = [Math.sin(SITE.rot), 
 const EAST = new THREE.Vector3(CU[0], 0, CV[0]), NORTH = new THREE.Vector3(-CU[1], 0, -CV[1]);
 const world = new THREE.Group(); scene.add(world);
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), M.ground);
-ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; ground.receiveShadow = true; world.add(ground);
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.3; ground.receiveShadow = true; world.add(ground);
 function flat(parent, x0, y0, x1, y1, mat, h = 0.02) {
   const [ax, az] = P(x0, y0), [bx, bz] = P(x1, y1);
   const m = new THREE.Mesh(new THREE.PlaneGeometry(bx - ax, bz - az), mat);
@@ -336,7 +336,7 @@ boxAt(southF, -2, 35.75, 62, 52, 0, 13, M.ctx, M.ctxEdge);
 
 // 衛星影像（Esri World Imagery，瀏覽器執行時載入；離線時只顯示素色地面）
 const LAT0 = 25.0569028, LON0 = 121.6085676, KX = 111320 * Math.cos(LAT0 * Math.PI / 180), KY = 110574;
-const satMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+const satMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
 function loadSat(z, halfM, yOff) {
   const n = 2 ** z, tx = lon => (lon + 180) / 360 * n, ty = lat => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n; };
   const x0 = Math.floor(tx(LON0 - halfM / KX)), x1 = Math.floor(tx(LON0 + halfM / KX)), y0 = Math.floor(ty(LAT0 + halfM / KY)), y1 = Math.floor(ty(LAT0 - halfM / KY));
@@ -347,7 +347,7 @@ function loadSat(z, halfM, yOff) {
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
   const mat = satMat.clone(); mat.map = tex; satMats.push(mat);
   const m = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Y1 - Y0), mat);
-  m.rotation.x = -Math.PI / 2; m.position.set((X0 + X1) / 2, yOff, (Y0 + Y1) / 2); m.receiveShadow = true; m.renderOrder = -1; city.add(m);
+  m.rotation.x = -Math.PI / 2; m.position.set((X0 + X1) / 2, yOff, (Y0 + Y1) / 2); m.receiveShadow = true; m.renderOrder = z === 17 ? -2 : -1; city.add(m);
   let left = (x1 - x0 + 1) * (y1 - y0 + 1), ok = 0;
   const done = () => { if (--left) return; if (!ok) return;
     // 邊緣淡出
@@ -363,8 +363,8 @@ function loadSat(z, halfM, yOff) {
   }
 }
 const satMats = [];
-loadSat(17, 900, 0.0);
-loadSat(18, 330, 0.01);
+loadSat(17, 900, -0.2);
+loadSat(18, 330, -0.1);
 
 /* 樹 */
 const trees = new THREE.Group(); world.add(trees);
