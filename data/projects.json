@@ -45,8 +45,248 @@
        "volume": 147.36
       }
      ]
+    },
+    {
+     "file": "盛均 Takeoff Inventory - 2026-11-26-202611261114.xlsx",
+     "date": "2026-11-26",
+     "total_volume": 621.25,
+     "lines": [
+      {
+       "category": "樓板",
+       "level": "PR",
+       "type": "",
+       "spec": "",
+       "count": 5,
+       "volume": 3.53
+      },
+      {
+       "category": "樓板",
+       "level": "4FL",
+       "type": "",
+       "spec": "",
+       "count": 17,
+       "volume": 14.67
+      },
+      {
+       "category": "樓板",
+       "level": "5FL",
+       "type": "",
+       "spec": "",
+       "count": 34,
+       "volume": 29.37
+      },
+      {
+       "category": "樓板",
+       "level": "RFL",
+       "type": "",
+       "spec": "",
+       "count": 8,
+       "volume": 10.51
+      },
+      {
+       "category": "樓板",
+       "level": "夾層",
+       "type": "",
+       "spec": "",
+       "count": 16,
+       "volume": 14.27
+      },
+      {
+       "category": "樓板",
+       "level": "1FL",
+       "type": "",
+       "spec": "",
+       "count": 18,
+       "volume": 14.42
+      },
+      {
+       "category": "樓板",
+       "level": "筏基",
+       "type": "",
+       "spec": "",
+       "count": 11,
+       "volume": 60.59
+      },
+      {
+       "category": "牆",
+       "level": "4FL",
+       "type": "",
+       "spec": "",
+       "count": 55,
+       "volume": 39.01
+      },
+      {
+       "category": "牆",
+       "level": "5FL",
+       "type": "",
+       "spec": "",
+       "count": 109,
+       "volume": 75.58
+      },
+      {
+       "category": "牆",
+       "level": "RFL",
+       "type": "",
+       "spec": "",
+       "count": 22,
+       "volume": 12.36
+      },
+      {
+       "category": "牆",
+       "level": "夾層",
+       "type": "",
+       "spec": "",
+       "count": 49,
+       "volume": 29.43
+      },
+      {
+       "category": "牆",
+       "level": "2FL",
+       "type": "",
+       "spec": "",
+       "count": 37,
+       "volume": 21.95
+      },
+      {
+       "category": "牆",
+       "level": "1FL",
+       "type": "",
+       "spec": "",
+       "count": 37,
+       "volume": 45.48
+      },
+      {
+       "category": "結構柱",
+       "level": "4FL",
+       "type": "",
+       "spec": "",
+       "count": 6,
+       "volume": 8.57
+      },
+      {
+       "category": "結構柱",
+       "level": "5FL",
+       "type": "",
+       "spec": "",
+       "count": 12,
+       "volume": 16.6
+      },
+      {
+       "category": "結構柱",
+       "level": "RFL",
+       "type": "",
+       "spec": "",
+       "count": 4,
+       "volume": 3.29
+      },
+      {
+       "category": "結構柱",
+       "level": "夾層",
+       "type": "",
+       "spec": "",
+       "count": 10,
+       "volume": 8.47
+      },
+      {
+       "category": "結構柱",
+       "level": "2FL",
+       "type": "",
+       "spec": "",
+       "count": 6,
+       "volume": 8.57
+      },
+      {
+       "category": "結構柱",
+       "level": "1FL",
+       "type": "",
+       "spec": "",
+       "count": 6,
+       "volume": 12.72
+      },
+      {
+       "category": "結構柱",
+       "level": "筏基",
+       "type": "",
+       "spec": "",
+       "count": 6,
+       "volume": 7.02
+      },
+      {
+       "category": "結構樑",
+       "level": "4FL",
+       "type": "",
+       "spec": "",
+       "count": 23,
+       "volume": 21.46
+      },
+      {
+       "category": "結構樑",
+       "level": "5FL",
+       "type": "",
+       "spec": "",
+       "count": 23,
+       "volume": 20.28
+      },
+      {
+       "category": "結構樑",
+       "level": "RFL",
+       "type": "",
+       "spec": "",
+       "count": 9,
+       "volume": 6.41
+      },
+      {
+       "category": "結構樑",
+       "level": "夾層",
+       "type": "",
+       "spec": "",
+       "count": 36,
+       "volume": 36.15
+      },
+      {
+       "category": "結構樑",
+       "level": "2FL",
+       "type": "",
+       "spec": "",
+       "count": 23,
+       "volume": 21.35
+      },
+      {
+       "category": "結構樑",
+       "level": "1FL",
+       "type": "",
+       "spec": "",
+       "count": 23,
+       "volume": 21.14
+      },
+      {
+       "category": "結構樑",
+       "level": "筏基",
+       "type": "",
+       "spec": "",
+       "count": 12,
+       "volume": 58.05
+      }
+     ]
     }
-   ]
+   ],
+   "mapping": {
+    "sheet": 0,
+    "header": 0,
+    "columns": {
+     "category": "算量类型",
+     "volume": "Volume (M3)",
+     "type": "",
+     "count": "",
+     "level": "位置",
+     "spec": "",
+     "item": "行项目名称"
+    },
+    "fixed": "",
+    "categories": {},
+    "types": {},
+    "ratios": {}
+   }
   }
  ]
 }
