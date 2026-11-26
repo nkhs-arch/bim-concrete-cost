@@ -450,6 +450,28 @@
                 </div>
             </div>
 
+            <!-- 各版本碳排比較 -->
+            <div id="carbon-versions" class="hidden mt-5 pt-4 border-t border-dark-border">
+                <div class="flex flex-wrap gap-2 items-baseline justify-between mb-2">
+                    <h4 class="text-xs font-semibold text-white"><i class="fa-solid fa-chart-column mr-1.5 text-emerald-400"></i>各版本碳排比較（公噸 CO₂e）</h4>
+                    <span id="carbon-versions-legend" class="flex items-center gap-3 text-[11px] text-slate-300">
+                        <span class="flex items-center"><span class="w-3 h-3 rounded mr-1.5" style="background:#10b981"></span>混凝土</span>
+                        <span class="flex items-center"><span class="w-3 h-3 rounded mr-1.5" style="background:#f97316"></span>鋼筋</span>
+                    </span>
+                </div>
+                <div class="relative h-52"><canvas id="carbonVersionChart"></canvas></div>
+                <div class="overflow-x-auto mt-3">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead><tr class="bg-dark-bg text-slate-400 border-b border-dark-border">
+                            <th class="p-2.5">版本</th><th class="p-2.5 text-right">體積 m³</th><th class="p-2.5 text-right">混凝土</th><th class="p-2.5 text-right">鋼筋</th>
+                            <th class="p-2.5 text-right">合計</th><th class="p-2.5 text-right">較前一版</th><th class="p-2.5 text-right">每 m³ (kg)</th>
+                        </tr></thead>
+                        <tbody id="carbon-versions-body" class="divide-y divide-dark-border/60 text-slate-200"></tbody>
+                    </table>
+                </div>
+                <p id="carbon-versions-note" class="text-[11px] text-slate-500 mt-2"></p>
+            </div>
+
             <p class="mt-4 pt-3 border-t border-dark-border text-xs text-slate-400">
                 * 係數：<span id="carbon-note">--</span>。<span id="carbon-scope">目前只算混凝土材料，尚未含鋼筋、模板與施工機具的碳排。</span>
             </p>
@@ -587,7 +609,7 @@
 
         const TAG_COLORS = { INFO: 'text-blue-400', TAKEOFF: 'text-amber-400', MODEL: 'text-cyan-400', PRICE: 'text-purple-400', CARBON: 'text-emerald-400', REBAR: 'text-orange-400', WARN: 'text-rose-400', CERT: 'text-amber-400', SUCCESS: 'text-emerald-400' };
 
-        let data, volumePieChart, versionTrendChart, costHistoryChart;
+        let data, volumePieChart, versionTrendChart, costHistoryChart, carbonVersionChart;
 
         const nt = n => 'NT$ ' + Math.round(n).toLocaleString('en-US');
         const signed = (n, fmt) => (n > 0 ? '+' : n < 0 ? '−' : '±') + fmt(Math.abs(n));
@@ -637,6 +659,7 @@
             showVersion(data.versions.length - 1);
             renderRebar();
             renderZones();
+            renderCarbonVersions();
             renderLogs();
             renderChangelog();
         }
@@ -805,6 +828,73 @@
             document.getElementById('table-total-sum').innerText = `混凝土合計: ${nt(sum)}`;
 
             renderCarbon(v, keys);
+        }
+
+
+        // 各版本碳排：混凝土每版都有；鋼筋要有類型資料（選手大樓只有目前模型有）
+        function renderCarbonVersions() {
+            const box = document.getElementById('carbon-versions');
+            const vs = data.versions || [];
+            if (!data.carbon_factors || vs.length < 2) { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+            const latest = vs[vs.length - 1];
+            const rows = vs.map(v => {
+                const rebar = v.rebar_tco2e ?? (v === latest ? data.rebar?.carbon?.tco2e : null) ?? null;
+                return { v, concrete: v.carbon_tco2e || 0, rebar, total: (v.carbon_tco2e || 0) + (rebar || 0) };
+            });
+            const t1 = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+            let partial = false;
+            document.getElementById('carbon-versions-body').innerHTML = rows.map((r, i) => {
+                const p = rows[i - 1];
+                let diff = '--';
+                if (p) {
+                    // 兩版都有鋼筋才比合計，否則只比混凝土，避免把「多算了鋼筋」當成碳排增加
+                    const both = r.rebar != null && p.rebar != null;
+                    const d = both ? r.total - p.total : r.concrete - p.concrete;
+                    if (!both && (r.rebar != null || p.rebar != null)) partial = true;
+                    const cls = d > 0 ? 'text-rose-400' : d < 0 ? 'text-emerald-400' : 'text-slate-400';
+                    diff = `<span class="${cls}">${signed(Math.round(d * 10) / 10, t1)}${both ? '' : '*'}</span>`;
+                }
+                return `<tr class="hover:bg-dark-hover transition">
+                    <td class="p-2.5 text-white">${esc(r.v.version)} <span class="text-slate-500">${esc(r.v.note || '')}</span></td>
+                    <td class="p-2.5 text-right text-cyan-400">${r.v.total_volume.toLocaleString('en-US')}</td>
+                    <td class="p-2.5 text-right">${t1(r.concrete)}</td>
+                    <td class="p-2.5 text-right">${r.rebar != null ? t1(r.rebar) : '<span class="text-slate-500">無類型資料</span>'}</td>
+                    <td class="p-2.5 text-right text-emerald-400 font-semibold">${t1(r.total)}</td>
+                    <td class="p-2.5 text-right">${diff}</td>
+                    <td class="p-2.5 text-right">${Math.round(r.total * 1000 / (r.v.total_volume || 1))}</td>
+                </tr>`;
+            }).join('');
+            document.getElementById('carbon-versions-note').innerText = '各版本都用同一組環境部係數計算，方便比較設計變更造成的碳排差異。'
+                + (partial ? '「*」表示兩版之中有一版沒有鋼筋資料，只比較混凝土。' : '');
+
+            if (carbonVersionChart) carbonVersionChart.destroy();
+            const surface = getComputedStyle(document.getElementById('carbon-section')).backgroundColor || '#111827';
+            const bar = { borderRadius: 4, borderSkipped: false, borderWidth: 2, borderColor: surface, maxBarThickness: 56 };
+            carbonVersionChart = new Chart(document.getElementById('carbonVersionChart'), {
+                type: 'bar',
+                data: {
+                    labels: rows.map(r => r.v.version),
+                    datasets: [
+                        { label: '混凝土', data: rows.map(r => r.concrete), backgroundColor: '#10b981', ...bar },
+                        { label: '鋼筋', data: rows.map(r => r.rebar ?? 0), backgroundColor: '#f97316', ...bar },
+                    ],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false, callbacks: {
+                            label: c => `${c.dataset.label}：${c.dataset.label === '鋼筋' && rows[c.dataIndex].rebar == null ? '無類型資料' : t1(c.parsed.y) + ' t'}`,
+                            footer: items => `合計：${t1(rows[items[0].dataIndex].total)} t`,
+                        } },
+                    },
+                    scales: {
+                        x: { stacked: true, grid: { display: false }, ticks: { color: '#94a3b8' } },
+                        y: { stacked: true, beginAtZero: true, grid: { color: '#1f2937' }, ticks: { color: '#94a3b8' } },
+                    },
+                },
+            });
         }
 
         function renderCarbon(v, keys) {
@@ -1690,6 +1780,12 @@
                 const { elements, types } = parseQuantities(linesToTable(pv.lines), calc.grades || {});
                 latestTypes = types;
                 const v = makeVersion(elements, { version: 'V' + (i + 1), model_name: pv.file, note: shortName(pv.file), detected_at: pv.date });
+                // 自建專案每版都有類型明細，所以每版都能算鋼筋碳排
+                const rb = data.rebar_official;
+                if (rb?.carbon && types.some(t => t.type)) {
+                    const net = types.reduce((s, t) => s + t.volume * (calc.rebar_ratios[t.key]?.[t.type] || 0) / 1000, 0);
+                    v.rebar_tco2e = Math.round(net * (1 + rb.loss_rate) * rb.carbon.factor * 10) / 10;
+                }
                 log('TAKEOFF', `${v.version} ${pv.file}：${Object.keys(elements).length} 類構件，總體積 ${v.total_volume.toLocaleString('en-US', { minimumFractionDigits: 2 })} m³`);
                 return v;
             });
@@ -1907,6 +2003,7 @@
             showVersion(data.versions.length - 1);
             renderRebar();
             renderZones();
+            renderCarbonVersions();
             renderLogs();
         }
 
