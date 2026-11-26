@@ -2070,7 +2070,7 @@
             const spec = t && t >= br.full_from_cm ? br.full : br.half;
             const pieces = area * spec.pieces * (1 + br.loss_rate);
             const mortar = area * spec.mortar_m3 * (1 + br.loss_rate);
-            return { m2: area, pieces, mortar, cost: pieces * br.brick_price + mortar * br.mortar_price + area * br.labor_per_m2, assumedHalf: !t };
+            return { m2: area, pieces, mortar, cost: pieces * br.brick_price + mortar * br.mortar_price + area * (br.labor_per_m2 || 0), assumedHalf: !t };
         }
 
         function readOutputs() {
