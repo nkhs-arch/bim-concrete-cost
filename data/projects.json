@@ -1,4 +1,52 @@
 {
  "format": "bim-concrete-cost-projects",
- "projects": []
+ "projects": [
+  {
+   "id": "pmwxf6ex4sla7",
+   "name": "盛均",
+   "created_at": "2026-11-26",
+   "updated_at": "2026-11-26",
+   "versions": [
+    {
+     "file": "盛均 Takeoff Inventory - 2026-11-26-202611261035.xlsx",
+     "date": "2026-11-26",
+     "total_volume": 621.25,
+     "lines": [
+      {
+       "category": "牆",
+       "level": "",
+       "type": "",
+       "spec": "",
+       "count": 309,
+       "volume": 223.81
+      },
+      {
+       "category": "結構構架",
+       "level": "",
+       "type": "",
+       "spec": "",
+       "count": 149,
+       "volume": 184.85
+      },
+      {
+       "category": "結構柱",
+       "level": "",
+       "type": "",
+       "spec": "",
+       "count": 50,
+       "volume": 65.23
+      },
+      {
+       "category": "樓板",
+       "level": "",
+       "type": "",
+       "spec": "",
+       "count": 109,
+       "volume": 147.36
+      }
+     ]
+    }
+   ]
+  }
+ ]
 }
