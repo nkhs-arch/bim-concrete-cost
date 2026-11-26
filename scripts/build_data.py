@@ -62,6 +62,12 @@ PCC_REBAR_URL = PCC_FILE_URL + urllib.parse.quote("鋼筋.csv")  # data.gov.tw/d
 DGBAS_INDEX_URL = "https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230553/pr0501a1m.xml"
 INDEX_ITEM = "水泥及其製品類"
 REBAR_INDEX_ITEM = "金屬製品類"
+# 模板與磚沒有政府公布的單價，用 data/rates.json 的基準價 × 主計總處個別項目指數調整。
+# 先找個別項目，指數檔沒有個別項目時退回所屬的中分類
+EXTRA_INDEX_ITEMS = {
+    "formwork": ["普通模板", "木材及其製品類"],
+    "brick": ["瓦片及紅磚", "磚瓦瓷類"],
+}
 # 預設 api_key 是政府資料開放平臺（data.gov.tw/dataset/28176）公開的共用金鑰，每天全部使用者合計只能呼叫 5000 次，
 # 常常被用完；到 data.moenv.gov.tw 註冊自己的金鑰後，設成環境變數 MOENV_API_KEY（GitHub 放在 Secrets）就會改用自己的
 MOENV_PUBLIC_KEY = "4c89a32a-a214-461b-bf29-30ff32a61a8a"
@@ -417,7 +423,26 @@ def fetch_price_indices():
     for name, series in indices.items():
         if not series:
             raise ValueError(f"物價指數檔裡找不到「{name}」")
-    return indices
+    return indices, extra_indices(root)
+
+
+def extra_indices(root):
+    """模板、紅磚用的指數：{"formwork": {"name": "普通模板", "series": {...}}, ...}，找不到的略過。"""
+    found = {}
+    for key, names in EXTRA_INDEX_ITEMS.items():
+        for name in names:
+            series = {}
+            for obs in root.iter("Obs"):
+                if obs.findtext("TYPE") != "原始值" or (obs.findtext("Item") or "").strip() != name:
+                    continue
+                value = (obs.findtext("Item_VALUE") or "").strip()
+                if value:
+                    y, m = obs.findtext("TIME_PERIOD").split("M")
+                    series[f"{y}-{m}"] = float(value)
+            if series:
+                found[key] = {"name": name, "series": series}
+                break
+    return found
 
 
 def load_price_data(region, rebar_spec):
@@ -451,13 +476,21 @@ def load_price_data(region, rebar_spec):
             log("WARN", f"工程會鋼筋價格下載失敗（{e}），也沒有快取，改用 rebar.json 的參考價")
 
     try:
-        indices = fetch_price_indices()
+        indices, extra = fetch_price_indices()
         index = indices[INDEX_ITEM]
         latest = max(index)
         log("PRICE", f"主計總處水泥類指數 最新 {latest} = {index[latest]}")
         log("REBAR", f"主計總處金屬製品類指數 最新 {latest} = {indices[REBAR_INDEX_ITEM].get(latest)}")
         cache["index"] = index
         rebar["index"] = indices[REBAR_INDEX_ITEM]
+        for key, label in (("formwork", "模板"), ("brick", "紅磚")):
+            if key in extra:
+                s = extra[key]["series"]
+                log("PRICE", f"主計總處{extra[key]['name']}指數（{label}用）最新 {max(s)} = {s[max(s)]}")
+            else:
+                log("WARN", f"物價指數檔裡找不到{label}用的指數，{label}單價不調整")
+        if extra:
+            cache["extra_index"] = extra
     except Exception as e:
         if "index" not in cache:
             raise
@@ -735,6 +768,7 @@ def main():
             "index": {m: cache["index"][m] for m in months[-HISTORY_MONTHS:]},
             "grades": info.get("grades", {}),
             "rebar_ratios": (rebar_config or {}).get("ratios", {}),
+            "extra_index": cache.get("extra_index", {}),
         },
         "changelog": load_changelog(),
         "logs": logs,

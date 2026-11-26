@@ -1479,7 +1479,7 @@
             const get = async p => (await fetch(p, { cache: 'no-store' })).json();
             const [cache, info, rebar] = await Promise.all([get('data/price_cache.json'), get('data/model_info.json'), get('data/rebar.json')]);
             return { base_period: cache.base_period, base_prices: cache.base_prices, index: cache.index,
-                     grades: info.grades || {}, rebar_ratios: rebar.ratios || {} };
+                     grades: info.grades || {}, rebar_ratios: rebar.ratios || {}, extra_index: cache.extra_index || {} };
         }
 
         function pricesFor(month, calc) {
@@ -2036,6 +2036,15 @@
             try { zoneRates = await (await fetch('data/rates.json', { cache: 'no-store' })).json(); } catch { zoneRates = null; }
         }
 
+        // 模板、紅磚單價 = rates.json 基準價 × 主計總處指數（最新月 ÷ 基準月）；沒有指數時不調整
+        function rateIndex(kind) {
+            const e = zoneCalc?.extra_index?.[kind], base = zoneRates?.[kind]?.base_period;
+            if (!e?.series || !base) return { ratio: 1 };
+            const latest = Object.keys(e.series).sort().pop();
+            const b = e.series[base];
+            return b ? { ratio: e.series[latest] / b, name: e.name, base, latest, from: b, to: e.series[latest] } : { ratio: 1, name: e.name, missingBase: true };
+        }
+
         // 模板面積（m²）：梁、柱用類型尺寸推算，板、牆有面積欄就直接用；都沒有時用經驗值（est）
         function formworkOf(key, l, fw) {
             const v = toNumber(l.volume), area = toNumber(l.area), len = toNumber(l.length);
@@ -2114,7 +2123,7 @@
                 };
                 if (key === 'bricks') {
                     if (!zoneRates) continue;
-                    const b = brickOf(l, zoneRates.brick);
+                    const b = brickOf(l, { ...zoneRates.brick, brick_price: zoneRates.brick.brick_price * rateIndex('brick').ratio });
                     const g = groupOf();
                     g.brickM2 += b.m2; g.brickPcs += b.pieces; g.brickCost += b.cost;
                     if (b.assumedHalf && b.m2) brickHalf = true;
@@ -2128,7 +2137,7 @@
                 const g = groupOf();
                 if (zoneRates) {
                     const f = formworkOf(key, l, zoneRates.formwork);
-                    g.fwM2 += f.m2; g.fwCost += f.m2 * zoneRates.formwork.price;
+                    g.fwM2 += f.m2; g.fwCost += f.m2 * zoneRates.formwork.price * rateIndex('formwork').ratio;
                     if (f.est && f.m2) fwEst = true;
                 }
                 g.volume += volume;
@@ -2208,7 +2217,13 @@
             if (showBrick) notes.push(`磚牆：1/2B 每 m² ${zoneRates.brick.half.pieces} 塊、砂漿 ${zoneRates.brick.half.mortar_m3} m³；1B 每 m² ${zoneRates.brick.full.pieces} 塊、砂漿 ${zoneRates.brick.full.mortar_m3} m³。${zoneRates.brick.price_note}。`
                 + (brickHalf ? '類型讀不出牆厚的磚牆以 1/2B 計。' : ''));
             if (outputs.brick && zoneRates && !hasBrick) notes.push('這個檔案沒有磚牆（類別名稱含「磚」）。');
-            if (showFw || showBrick) notes.push('模板與磚的單價是練習假設（data/rates.json），碳排尚未包含模板與磚。');
+            const idxNote = (kind, label, unitPrice, unit) => {
+                const r = rateIndex(kind);
+                return r.from ? `${label}依主計總處「${r.name}」指數調整（${r.base} ${r.from} → ${r.latest} ${r.to}），目前 NT$ ${(unitPrice * r.ratio).toLocaleString('en-US', { maximumFractionDigits: 1 })} / ${unit}`
+                    : `${label}單價未依指數調整（${r.missingBase ? '指數沒有基準月份' : '尚無指數資料'}）`;
+            };
+            if (showFw || showBrick) notes.push([showFw && idxNote('formwork', '模板', zoneRates.formwork.price, 'm²'), showBrick && idxNote('brick', '紅磚', zoneRates.brick.brick_price, '塊')].filter(Boolean).join('；')
+                + '。基準價見 data/rates.json，碳排尚未包含模板與磚。');
             notes.push('碳排只含勾選的材料；單價、鋼筋比、係數與下方各區相同。');
             document.getElementById('zone-note').innerText = notes.join(' ');
         }
