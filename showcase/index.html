@@ -754,14 +754,14 @@ const CH = [
   { k: '碳排放', cam: [-120, 22, 176, 0, 8, 0], sets: ['green'], xray: true, html: () => `
     ${eb(14, '6D 永續｜蘊含碳')}
     <h2>蓋這些結構<br>排放約 ${fmt(totalCarbon)} 噸 CO₂e</h2>
-    <p class="lead">混凝土每 m³ 約 ${fmt(CF280)} kgCO₂e、鋼筋每 kg 約 ${R.carbon ? R.carbon.factor : 0.834} kgCO₂e，係數取自<em>環境部碳足跡資料庫</em>。</p>
+    <p class="lead">依內政部建築研究所<em>《低碳（低蘊含碳）建築評估手冊》（LEBR）</em>的算法：混凝土每 m³ 約 ${fmt(CF280)} kgCO₂e、鋼筋每 kg 約 ${R.carbon ? R.carbon.factor : 0.834} kgCO₂e，乘上模型數量。</p>
     <div class="rule"></div>
     <div class="bars">
       ${bar('混凝土', V.carbon_tco2e, totalCarbon, fmt(V.carbon_tco2e), true)}
       ${bar('鋼筋', R.carbon ? R.carbon.tco2e : 0, totalCarbon, fmt(R.carbon ? R.carbon.tco2e : 0))}
     </div>
     <div class="legend"><span>單位 tCO₂e</span></div>
-    <p class="note">評估方式參照建研所《低碳建築評估手冊》；目前含混凝土與鋼筋，尚未含模板與施工機具。</p>` },
+    <p class="note">係數隨成本網站每週自動更新；目前含混凝土與鋼筋，尚未含模板與施工機具。</p>` },
 
   { k: '版本比較', cam: [-60, 30, 176, 0, 8, 0], sets: [], explode: true, xray: true, html: () => `
     ${eb(15, '版本比較｜模型每次改版都留紀錄')}
@@ -928,7 +928,7 @@ function loop(now) {
 const start = parseInt(location.hash.slice(1));
 const p0 = camPose(-60, 55, 900, 0, 0, 0); camera.position.copy(p0.pos); controls.target.copy(p0.tgt);
 go(Number.isFinite(start) ? start : 0);
-document.getElementById('loading').style.opacity = 0;
+document.getElementById('loading').remove();
 poke();
 requestAnimationFrame(loop);
 </script>
