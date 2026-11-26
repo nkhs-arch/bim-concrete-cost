@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>選手大樓 成果展示</title>
+<meta name="description" content="校園技能選手訓練大樓 BIM 專題：基地分析與 BIM 成本自動估算的互動展示">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ebebe7; --bg-rgb:235,235,231; --ink:#1c1c1a; --ink-2:#4a4a46; --muted:#85857e; --line:#cfcfc8;
+  --chip:#ffffffcc; --chip-line:#d6d6cf; --accent:#d9902b; --accent-soft:#f3dfbf; --green:#6f9a4c; --blue:#3f6fa8; --red:#c4553b;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  --sans:'Noto Sans TC','PingFang TC','Microsoft JhengHei',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16181b; --bg-rgb:22,24,27; --ink:#ecebe6; --ink-2:#c3c2bb; --muted:#8b8a84; --line:#34373c;
+    --chip:#22252acc; --chip-line:#3a3d43; --accent:#f0aa45; --accent-soft:#4a3a22; --green:#8fbf68; --blue:#7aa6dd; --red:#e07a5f;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181b; --bg-rgb:22,24,27; --ink:#ecebe6; --ink-2:#c3c2bb; --muted:#8b8a84; --line:#34373c;
+  --chip:#22252acc; --chip-line:#3a3d43; --accent:#f0aa45; --accent-soft:#4a3a22; --green:#8fbf68; --blue:#7aa6dd; --red:#e07a5f;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+#stage{position:fixed;inset:0}
+#stage canvas{display:block;touch-action:none}
+#labels{position:fixed;inset:0;pointer-events:none}
+.lbl{font:500 12px/1.3 var(--sans);color:var(--ink);background:var(--chip);border:1px solid var(--chip-line);padding:3px 8px;border-radius:3px;white-space:nowrap;backdrop-filter:blur(4px);transition:opacity .4s}
+.lbl.big{font-size:13px;padding:6px 10px;text-align:center}
+.lbl.big b{display:block;font-size:15px}
+.lbl.win{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.lbl small{color:var(--muted);font-family:var(--mono);font-size:11px}
+.lbl.dim{background:transparent;border:none;font-family:var(--mono);font-size:12px;color:var(--ink-2);backdrop-filter:none;text-shadow:0 0 4px rgba(var(--bg-rgb),.9)}
+
+/* left fade + panel */
+#fade{position:fixed;inset:0 auto 0 0;width:min(62vw,820px);pointer-events:none;
+  background:linear-gradient(90deg,rgba(var(--bg-rgb),.97) 0%,rgba(var(--bg-rgb),.9) 45%,rgba(var(--bg-rgb),0) 100%)}
+header{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:22px 40px 0 64px;pointer-events:none}
+.brand{font-size:14px;letter-spacing:.04em;display:flex;flex-direction:column;gap:3px;pointer-events:auto;text-shadow:0 0 6px rgba(var(--bg-rgb),.9)}
+.brand b{font-weight:700;font-size:15px}
+.brand span{color:var(--ink-2);font-size:13.5px}
+.ctrls{display:flex;gap:6px;pointer-events:auto}
+.ctrls button{background:var(--chip);border:1px solid var(--chip-line);padding:7px 13px;font-size:13px;border-radius:3px;cursor:pointer;backdrop-filter:blur(4px)}
+.ctrls button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.ctrls button:hover{border-color:var(--ink-2)}
+
+#panel{position:fixed;left:64px;top:104px;bottom:104px;width:min(460px,38vw);overflow-y:auto;scrollbar-width:none;padding-right:8px}
+#panel::-webkit-scrollbar{display:none}
+.slide{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.eyebrow{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-2);margin-bottom:14px}
+.eyebrow .no{background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:12px;padding:3px 8px;border-radius:2px}
+h1{font-weight:300;font-size:clamp(44px,5.4vw,76px);line-height:1.12;margin:0 0 18px;letter-spacing:.02em}
+h2{font-weight:300;font-size:clamp(32px,3.4vw,48px);line-height:1.18;margin:0 0 16px;letter-spacing:.02em}
+.lead{font-size:15.5px;line-height:1.95;color:var(--ink);margin:0 0 6px}
+.lead em{font-style:normal;color:var(--accent);font-weight:500}
+.sub{font-size:14px;line-height:1.85;color:var(--ink-2);margin:0}
+.rule{height:1px;background:var(--line);margin:22px 0}
+.stats{display:flex;flex-wrap:wrap;gap:22px 40px}
+.stat .v{font-family:var(--mono);font-size:clamp(30px,3vw,42px);line-height:1;letter-spacing:-.01em}
+.stat .v small{font-size:13px;margin-left:3px;color:var(--ink-2)}
+.stat .k{font-size:12.5px;color:var(--muted);margin-top:8px}
+.stat.hl .v{color:var(--accent)}
+.hint{font-size:12.5px;color:var(--muted);margin-top:22px;line-height:1.8}
+.note{font-size:12px;color:var(--muted);line-height:1.7;margin-top:16px}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border:1px solid var(--line);border-radius:2px;color:var(--muted);margin-left:6px;vertical-align:2px}
+
+/* bars */
+.bars{display:grid;gap:12px;margin-top:4px}
+.bar{display:grid;grid-template-columns:150px 1fr 54px;align-items:center;gap:12px;font-size:13px}
+.bar .t{height:8px;background:var(--line);border-radius:1px;overflow:hidden}
+.bar .t i{display:block;height:100%;background:var(--ink-2);transform-origin:left;animation:grow 1.1s cubic-bezier(.2,.7,.2,1) both}
+.bar.hl .t i{background:var(--accent)}
+.bar .n{font-family:var(--mono);text-align:right}
+@keyframes grow{from{transform:scaleX(0)}}
+/* table */
+table.cmp{width:100%;border-collapse:collapse;font-size:13px}
+table.cmp th,table.cmp td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:400}
+table.cmp th:first-child,table.cmp td:first-child{text-align:left;color:var(--ink-2)}
+table.cmp thead th{color:var(--muted);font-size:12px}
+table.cmp td{font-family:var(--mono)}
+table.cmp .win{color:var(--accent)}
+/* flow */
+.flow{display:grid;gap:0;margin-top:6px}
+.flow .st{display:grid;grid-template-columns:28px 1fr;gap:12px;position:relative;padding-bottom:16px}
+.flow .st:before{content:"";position:absolute;left:13px;top:24px;bottom:0;width:1px;background:var(--line)}
+.flow .st:last-child:before{display:none}
+.flow .d{width:27px;height:27px;border:1px solid var(--ink-2);border-radius:50%;display:grid;place-items:center;font-family:var(--mono);font-size:12px;background:var(--bg)}
+.flow .st.hl .d{background:var(--accent);border-color:var(--accent);color:#fff}
+.flow b{font-weight:500;font-size:14px}
+.flow p{margin:2px 0 0;font-size:12.5px;color:var(--ink-2);line-height:1.7}
+/* figures */
+.figs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+.figs.one{grid-template-columns:1fr}
+figure{margin:0;cursor:zoom-in}
+figure img{width:100%;display:block;border:1px solid var(--line);aspect-ratio:16/9;object-fit:cover;background:var(--line)}
+figcaption{font-size:11.5px;color:var(--muted);margin-top:5px}
+.btn{display:inline-flex;align-items:center;gap:8px;margin-top:18px;background:var(--ink);color:var(--bg);border:none;padding:11px 18px;font-size:14px;border-radius:3px;cursor:pointer;text-decoration:none}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--ink-2)}
+.qrs{display:flex;gap:22px;margin-top:20px;flex-wrap:wrap}
+.qr{display:grid;gap:6px;font-size:12px;color:var(--ink-2);text-align:center}
+.qr div{background:#fff;padding:8px;border:1px solid var(--line);width:132px;height:132px}
+.qr div img,.qr div svg{width:100%;height:100%;display:block}
+.spark{width:100%;height:120px;display:block;overflow:visible}
+.timechip{display:inline-block;font-family:var(--mono);font-size:13px;background:var(--accent-soft);color:var(--ink);padding:2px 8px;border-radius:2px;margin-left:6px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px}
+
+/* footer nav */
+#foot{position:fixed;left:0;right:0;bottom:0;padding:0 40px 18px 64px;display:flex;align-items:flex-end;gap:24px}
+#srcnote{position:fixed;left:64px;bottom:76px;font-size:11.5px;color:var(--muted)}
+nav{flex:1;display:flex;border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button{flex:1 0 auto;min-width:64px;background:none;border:none;padding:14px 8px 4px 0;text-align:left;font-size:12px;color:var(--muted);cursor:pointer;position:relative;white-space:nowrap}
+nav button .n{font-family:var(--mono);margin-right:4px}
+nav button.on{color:var(--ink)}
+nav button:before{content:"";position:absolute;left:0;right:10px;top:-1px;height:2px;background:transparent}
+nav button.on:before{background:var(--ink)}
+nav button .pg{position:absolute;left:0;top:-1px;height:2px;background:var(--accent);width:0}
+.arrows{display:flex;gap:6px}
+.arrows button{background:none;border:none;font-size:22px;padding:4px 8px;cursor:pointer;color:var(--ink)}
+#compass{position:fixed;right:44px;bottom:84px;width:58px;height:58px;border:1px solid var(--line);border-radius:50%;background:var(--chip);display:grid;place-items:center}
+#compass svg{width:40px;height:40px;transition:transform .1s linear}
+#compass span{position:absolute;right:-12px;bottom:-4px;font:500 11px var(--mono);color:var(--ink-2)}
+
+/* overlays */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;z-index:20;align-items:center;justify-content:center;padding:28px}
+.ov.on{display:flex}
+.ov img{max-width:100%;max-height:100%;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+.ov .x{position:absolute;top:14px;right:18px;background:#fff;color:#111;border:none;border-radius:3px;padding:6px 12px;cursor:pointer;font-size:14px}
+.ov .cap{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#eee;font-size:13px}
+#dash iframe{width:min(1400px,100%);height:100%;border:none;background:#0f172a;border-radius:4px}
+#loading{position:fixed;inset:0;display:grid;place-items:center;font-size:13px;color:var(--muted);pointer-events:none;transition:opacity .6s}
+
+@media (max-width: 900px), (orientation: portrait) and (max-width: 1100px){
+  #fade{width:100%;top:auto;height:62vh;background:linear-gradient(0deg,rgba(var(--bg-rgb),.98) 0%,rgba(var(--bg-rgb),.94) 70%,rgba(var(--bg-rgb),0) 100%)}
+  header{padding:14px 16px 0}
+  .brand b{font-size:13px} .brand span{font-size:11.5px}
+  .ctrls button{padding:6px 9px;font-size:12px}
+  #panel{left:16px;right:16px;width:auto;top:auto;bottom:86px;max-height:52vh}
+  h1{font-size:40px} h2{font-size:28px}
+  .lead{font-size:14.5px;line-height:1.8}
+  #foot{padding:0 8px 10px 16px;gap:8px}
+  #srcnote{display:none}
+  #compass{right:16px;bottom:auto;top:64px;width:46px;height:46px}
+  #compass svg{width:32px;height:32px}
+  nav button{min-width:auto;padding-right:14px}
+  nav button .t{display:none}
+  nav button.on .t{display:inline}
+  .bar{grid-template-columns:110px 1fr 48px}
+  .stats{gap:16px 28px}
+}
+@media (max-width: 480px){
+  .ctrls button.opt{display:none}
+}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="labels"></div>
+<div id="fade"></div>
+<div id="loading">載入模型中…</div>
+
+<header>
+  <div class="brand"><b>臺北市立南港高級工業職業學校</b><span>BIM 實作：建模、整合與資訊應用成果展</span></div>
+  <div class="ctrls">
+    <button id="bAuto" aria-pressed="false">自動播放</button>
+    <button id="bSound" class="opt" aria-pressed="false">音效 關</button>
+    <button id="bTheme">明暗</button>
+    <button id="bFull" class="opt">全螢幕</button>
+  </div>
+</header>
+
+<main id="panel" aria-live="polite"></main>
+<div id="srcnote"></div>
+<div id="compass" title="指北"><svg viewBox="-20 -20 40 40"><path d="M0-17 6 4 0 0-6 4Z" fill="currentColor"/><path d="M0 17 6 4 0 0-6 4Z" fill="none" stroke="currentColor" stroke-width="1"/></svg><span>N</span></div>
+
+<div id="foot">
+  <nav id="nav"></nav>
+  <div class="arrows"><button id="bPrev" aria-label="上一章">←</button><button id="bNext" aria-label="下一章">→</button></div>
+</div>
+
+<div class="ov" id="lightbox"><button class="x">關閉</button><img alt=""><div class="cap"></div></div>
+<div class="ov" id="dash"><button class="x">關閉儀表板</button><iframe title="BIM 成本儀表板" loading="lazy"></iframe></div>
+
+<script src="vendor/qrcode.js"></script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from './vendor/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from './vendor/CSS2DRenderer.js';
+
+/* ---------- 可調整的文字 ---------- */
+const TITLE_SUB = '夜燈不滅：為晚歸選手而生的 BIM 訓練大樓設計';
+const DASH_URL = '../#project=builtin';
+const SITE_URL = 'https://nkhs-arch.github.io/bim-concrete-cost/';
+const SHOW_URL = 'https://nkhs-arch.github.io/bim-concrete-cost/showcase/';
+
+/* ---------- 資料 ---------- */
+const [g3, D] = await Promise.all([
+  fetch('g3_data.json').then(r => r.json()),
+  fetch('../data.json').then(r => r.json()).catch(() => null)
+]);
+const LV = Object.fromEntries(g3.levels);           // {1F:0,2F:5.8,...}
+const LV_NAMES = g3.levels.map(l => l[0]);
+const H = LV.RF;
+const ringArea = r => Math.abs(r.reduce((s, p, i) => { const q = r[(i + 1) % r.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) / 2);
+const GFA = {}; let GREEN = 0;
+for (const [lv, arr] of Object.entries(g3.slabs)) for (const s of arr) {
+  if (s.t.includes('綠屋頂')) { GREEN += ringArea(s.poly[0]); continue; }
+  if (lv !== 'RF') GFA[lv] = (GFA[lv] || 0) + ringArea(s.poly[0]);
+}
+const GFA_TOTAL = Object.values(GFA).reduce((a, b) => a + b, 0);
+
+const fmt = (n, d = 0) => Number(n).toLocaleString('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d });
+const wan = n => fmt(n / 1e4, 1);
+// 成本資料（data.json；讀不到時用 2026-11-26 的數字）
+const V = D ? D.versions[D.versions.length - 1] : { version: 'V2', total_volume: 4326.77, cost_at_current_price: 14036042, carbon_tco2e: 1462.4, elements: { floors: { volume: 2117.16 }, columns: { volume: 660.13 }, beams: { volume: 1549.48 } } };
+const VERS = D ? D.versions : [{ version: 'V1', total_volume: 4463.52, cost_at_current_price: 14479659, carbon_tco2e: 1508.7 }, V];
+const R = D ? D.rebar : { gross_weight_t: 591.9, price: 20202, cost: 11957321, total_cost: 25993363, carbon: { tco2e: 493.6, factor: 0.834 } };
+const PRICE280 = D ? D.prices['280'] : 3244;
+const PRICE_MONTH = D ? D.price_month : '2026-10';
+const HIST = D ? D.cost_history : [];
+const CF280 = D ? D.carbon_factors['280'].factor : 338;
+
+/* ---------- three.js 場景 ---------- */
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+stage.appendChild(renderer.domElement);
+const labelR = new CSS2DRenderer({ element: document.getElementById('labels') });
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xebebe7, 700, 1500);
+const camera = new THREE.PerspectiveCamera(32, 1, 0.5, 6000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI * 0.49; controls.minDistance = 25; controls.maxDistance = 1300;
+controls.enablePan = false;
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0xcfcfc6, 1.1); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -170, right: 170, top: 170, bottom: -170, near: 1, far: 600 });
+sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+scene.add(sun, sun.target);
+
+// 座標：資料 x 往東、y 往南 → three X=x-30, Z=y-15（北 = -Z）
+const OX = 30, OY = 15;
+const P = (x, y) => [x - OX, y - OY];
+
+const M = {
+  ground: new THREE.MeshLambertMaterial({ color: 0xe4e4df }),
+  garden: new THREE.MeshLambertMaterial({ color: 0xd3dcc6, transparent: true, opacity: 0.55 }),
+  road: new THREE.MeshLambertMaterial({ color: 0xd2d2cc }),
+  ctx: new THREE.MeshLambertMaterial({ color: 0xf4f4f1 }),
+  slab: new THREE.MeshLambertMaterial({ color: 0xf7f7f4 }),
+  ext: new THREE.MeshLambertMaterial({ color: 0xf2f2ee, transparent: true, opacity: 1 }),
+  int: new THREE.MeshLambertMaterial({ color: 0xe9e9e4, transparent: true, opacity: 1 }),
+  win: new THREE.MeshLambertMaterial({ color: 0x9fb3bf, emissive: 0x000000 }),
+  green: new THREE.MeshLambertMaterial({ color: 0x8fb46a }),
+  leaf: new THREE.MeshLambertMaterial({ color: 0x86ad5c }),
+  trunk: new THREE.MeshLambertMaterial({ color: 0x8a7a66 }),
+  pv: new THREE.MeshLambertMaterial({ color: 0x2f4a6d }),
+  frc: new THREE.MeshBasicMaterial({ color: 0xd9902b, transparent: true, opacity: 0.18, depthWrite: false }),
+  edge: new THREE.LineBasicMaterial({ color: 0x55554f, transparent: true, opacity: 0.55 }),
+  ctxEdge: new THREE.LineBasicMaterial({ color: 0x9a9a92, transparent: true, opacity: 0.45 }),
+  dash: new THREE.LineDashedMaterial({ color: 0xd9902b, dashSize: 1.2, gapSize: 0.8 }),
+  mass: new THREE.MeshLambertMaterial({ color: 0xf4f4f1 }),
+  massG3: new THREE.MeshLambertMaterial({ color: 0xf4f4f1 }),
+};
+
+function addEdges(mesh, mat = M.edge) {
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 25), mat);
+  e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.scale.copy(mesh.scale);
+  mesh.parent.add(e); mesh.userData.edges = e; return e;
+}
+function boxAt(parent, x0, y0, x1, y1, z0, z1, mat, edgeMat = M.edge) {
+  const [ax, az] = P(Math.min(x0, x1), Math.min(y0, y1)), [bx, bz] = P(Math.max(x0, x1), Math.max(y0, y1));
+  const m = new THREE.Mesh(new THREE.BoxGeometry(bx - ax, z1 - z0, bz - az), mat);
+  m.position.set((ax + bx) / 2, (z0 + z1) / 2, (az + bz) / 2);
+  m.castShadow = m.receiveShadow = true; parent.add(m);
+  if (edgeMat) addEdges(m, edgeMat);
+  return m;
+}
+
+/* 地面、衛星影像、周邊建物（OpenStreetMap） */
+// 基地在校園座標中的位置（估計）：建築西北角在南港高工中心往西 126 m、往南 43.5 m，
+// 校舍軸線較正北偏約 12°。要微調位置改這三個數字。
+const SITE = { nwX: -126.0, nwY: 43.5, rot: 0.2075 };
+const CU = [Math.cos(SITE.rot), -Math.sin(SITE.rot)], CV = [Math.sin(SITE.rot), Math.cos(SITE.rot)]; // 建築 x、y 軸在校園座標的方向
+const EAST = new THREE.Vector3(CU[0], 0, CV[0]), NORTH = new THREE.Vector3(-CU[1], 0, -CV[1]);
+const world = new THREE.Group(); scene.add(world);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), M.ground);
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; ground.receiveShadow = true; world.add(ground);
+function flat(parent, x0, y0, x1, y1, mat, h = 0.02) {
+  const [ax, az] = P(x0, y0), [bx, bz] = P(x1, y1);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(bx - ax, bz - az), mat);
+  m.rotation.x = -Math.PI / 2; m.position.set((ax + bx) / 2, h, (az + bz) / 2); m.receiveShadow = true; parent.add(m); return m;
+}
+const gardenGrp = new THREE.Group(); world.add(gardenGrp); gardenGrp.visible = false;
+flat(gardenGrp, -1.5, -3.5, 67, 34.5, M.garden, 0.06);
+
+// 城市群組：內部用校園座標（x 東、z 南，公尺），整組旋轉到建築座標
+const city = new THREE.Group(); world.add(city);
+city.rotation.y = -SITE.rot;
+{ const rx = -SITE.nwX, ry = -SITE.nwY; city.position.set(rx * CU[0] + ry * CU[1] - OX, 0, rx * CV[0] + ry * CV[1] - OY); }
+const ctx = new THREE.Group(); city.add(ctx);
+const toData = (X, Y) => { const rx = X - SITE.nwX, ry = Y - SITE.nwY; return [rx * CU[0] + ry * CU[1], rx * CV[0] + ry * CV[1]]; };
+fetch('context.txt').then(r => r.text()).then(txt => {
+  for (const line of txt.split('\n')) {
+    if (!line.trim() || line[0] === '#') continue;
+    const [c, hs, name] = line.split('|'); const n = c.trim().split(/\s+/).map(Number);
+    const pts = []; for (let i = 0; i < n.length; i += 2) pts.push([n[i], n[i + 1]]);
+    let cx = 0, cy = 0; pts.forEach(p => { cx += p[0]; cy += p[1]; }); cx /= pts.length; cy /= pts.length;
+    const [dx, dy] = toData(cx, cy); if (dx > -3 && dx < 63 && dy > -3 && dy < 33) continue;
+    let h = +hs; if (!h) h = (name || '').startsWith('S') ? 15 : 3.4 * (3 + Math.abs(Math.round(cx * 7 + cy * 13)) % 5);
+    const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, -y)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false }); geo.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(geo, M.ctx); m.castShadow = m.receiveShadow = true; ctx.add(m); addEdges(m, M.ctxEdge);
+  }
+}).catch(() => { });
+// 南側第四工廠：開放街圖沒有，依基地資料補一個量體
+const southF = new THREE.Group(); world.add(southF);
+boxAt(southF, -2, 35.75, 62, 52, 0, 13, M.ctx, M.ctxEdge);
+
+// 衛星影像（Esri World Imagery，瀏覽器執行時載入；離線時只顯示素色地面）
+const LAT0 = 25.0569028, LON0 = 121.6085676, KX = 111320 * Math.cos(LAT0 * Math.PI / 180), KY = 110574;
+const satMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+function loadSat(z, halfM, yOff) {
+  const n = 2 ** z, tx = lon => (lon + 180) / 360 * n, ty = lat => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n; };
+  const x0 = Math.floor(tx(LON0 - halfM / KX)), x1 = Math.floor(tx(LON0 + halfM / KX)), y0 = Math.floor(ty(LAT0 + halfM / KY)), y1 = Math.floor(ty(LAT0 - halfM / KY));
+  const W = (x1 - x0 + 1) * 256, Hh = (y1 - y0 + 1) * 256;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; const g = cv.getContext('2d');
+  const lonOf = x => x / n * 360 - 180, latOf = y => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+  const X0 = (lonOf(x0) - LON0) * KX, X1 = (lonOf(x1 + 1) - LON0) * KX, Y0 = -(latOf(y0) - LAT0) * KY, Y1 = -(latOf(y1 + 1) - LAT0) * KY;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const mat = satMat.clone(); mat.map = tex; satMats.push(mat);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Y1 - Y0), mat);
+  m.rotation.x = -Math.PI / 2; m.position.set((X0 + X1) / 2, yOff, (Y0 + Y1) / 2); m.receiveShadow = true; m.renderOrder = -1; city.add(m);
+  let left = (x1 - x0 + 1) * (y1 - y0 + 1), ok = 0;
+  const done = () => { if (--left) return; if (!ok) return;
+    // 邊緣淡出
+    const rg = g.createRadialGradient(W / 2, Hh / 2, Math.min(W, Hh) * 0.3, W / 2, Hh / 2, Math.min(W, Hh) * 0.5);
+    rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalCompositeOperation = 'destination-in'; g.fillStyle = rg; g.fillRect(0, 0, W, Hh);
+    tex.needsUpdate = true; mat.opacity = 1; };
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+    const im = new Image(); im.crossOrigin = 'anonymous';
+    im.onload = () => { g.drawImage(im, (x - x0) * 256, (y - y0) * 256); ok++; done(); };
+    im.onerror = done;
+    im.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+  }
+}
+const satMats = [];
+loadSat(17, 900, 0.0);
+loadSat(18, 330, 0.01);
+
+/* 樹 */
+const trees = new THREE.Group(); world.add(trees);
+{
+  const crown = new THREE.IcosahedronGeometry(1, 1), trunk = new THREE.CylinderGeometry(0.12, 0.16, 1, 5);
+  const spots = []; let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const free = (x, y) => !(x > -1 && x < 61 && y > -1 && y < 31);
+  for (let i = 0; i < 400 && spots.length < 70; i++) { const x = -1 + rnd() * 67, y = -3 + rnd() * 37; if (free(x, y)) spots.push([x, y, 0, 0.8 + rnd() * 0.6]); }
+  const pts = spots.filter(s => s[2] === 0);
+  const cI = new THREE.InstancedMesh(crown, M.leaf, pts.length), tI = new THREE.InstancedMesh(trunk, M.trunk, pts.length);
+  const m4 = new THREE.Matrix4();
+  pts.forEach((s, i) => {
+    const [X, Z] = P(s[0], s[1]), k = s[3];
+    m4.compose(new THREE.Vector3(X, 3.2 * k, Z), new THREE.Quaternion(), new THREE.Vector3(1.9 * k, 2.1 * k, 1.9 * k)); cI.setMatrixAt(i, m4);
+    m4.compose(new THREE.Vector3(X, 1.1 * k, Z), new THREE.Quaternion(), new THREE.Vector3(k, 2.2 * k, k)); tI.setMatrixAt(i, m4);
+  });
+  cI.castShadow = tI.castShadow = true; trees.add(cI, tI);
+}
+
+/* ---------- G3 量體（g3_data.json，LOD 100） ---------- */
+const bld = new THREE.Group(); scene.add(bld);
+const storeys = LV_NAMES.map(n => { const g = new THREE.Group(); g.name = n; bld.add(g); return g; });
+const SI = n => LV_NAMES.indexOf(n);
+function shapeFrom(poly) {
+  const toV = r => r.map(([x, y]) => { const [X, Z] = P(x, y); return new THREE.Vector2(X, -Z); });
+  const s = new THREE.Shape(toV(poly[0]));
+  for (const h of poly.slice(1)) s.holes.push(new THREE.Path(toV(h)));
+  return s;
+}
+const slabMeshes = [], greenMeshes = [], extWalls = [], intWalls = [], wins = [], roofMeshes = [];
+for (const [lv, arr] of Object.entries(g3.slabs)) for (const s of arr) {
+  const green = s.t.includes('綠屋頂'), t = green ? 0.5 : 0.3;
+  const geo = new THREE.ExtrudeGeometry(shapeFrom(s.poly), { depth: t, bevelEnabled: false });
+  geo.rotateX(-Math.PI / 2);
+  const m = new THREE.Mesh(geo, green ? M.green : M.slab);
+  m.position.y = LV[lv] - (green ? 0.2 : t) + 0.001; m.castShadow = m.receiveShadow = true;
+  storeys[SI(lv)].add(m); addEdges(m);
+  (green ? greenMeshes : slabMeshes).push(m); if (lv === 'RF') roofMeshes.push({ m, s });
+  if (green) { // 屋頂花園小灌木
+    const [x0, y0] = s.poly[0][0], xs = s.poly[0].map(p => p[0]), ys = s.poly[0].map(p => p[1]);
+    const g = new THREE.IcosahedronGeometry(0.7, 0); const n = Math.round(ringArea(s.poly[0]) / 22);
+    const I = new THREE.InstancedMesh(g, M.leaf, n); const m4 = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) {
+      const x = Math.min(...xs) + 1.2 + ((i * 0.618) % 1) * (Math.max(...xs) - Math.min(...xs) - 2.4);
+      const y = Math.min(...ys) + 1.2 + ((i * 0.381 + 0.2) % 1) * (Math.max(...ys) - Math.min(...ys) - 2.4);
+      const [X, Z] = P(x, y), k = 0.7 + ((i * 0.77) % 1) * 0.8;
+      m4.compose(new THREE.Vector3(X, LV[lv] + 0.6 * k, Z), new THREE.Quaternion(), new THREE.Vector3(k, k, k)); I.setMatrixAt(i, m4);
+    }
+    I.castShadow = true; storeys[SI(lv)].add(I);
+  }
+}
+// 每層外框（判斷外牆朝外方向用）
+const outlines = {};
+for (const [lv, arr] of Object.entries(g3.slabs)) outlines[lv] = arr.filter(s => !s.t.includes('綠屋頂')).map(s => s.poly[0]);
+const inside = (x, y, rings) => rings.some(r => { let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; });
+for (const w of g3.walls) {
+  const [x0, y0, x1, y1] = w.p, z0 = LV[w.fl], z1 = LV[w.top] - 0.02, len = Math.hypot(x1 - x0, y1 - y0);
+  const ext = w.t.includes('外牆'), th = w.t.includes('12cm') ? 0.12 : 0.2;
+  const [ax, az] = P(x0, y0), [bx, bz] = P(x1, y1);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(len + (ext ? th : 0), z1 - z0, th), ext ? M.ext : M.int);
+  m.position.set((ax + bx) / 2, (z0 + z1) / 2, (az + bz) / 2);
+  m.rotation.y = -Math.atan2(bz - az, bx - ax);
+  m.castShadow = m.receiveShadow = true; storeys[SI(w.fl)].add(m); addEdges(m);
+  (ext ? extWalls : intWalls).push(m);
+  if (ext) { // 帶狀窗
+    let nx = (y1 - y0) / len, ny = -(x1 - x0) / len;
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    if (inside(mx + nx * 0.8, my + ny * 0.8, outlines[w.fl] || [])) { nx = -nx; ny = -ny; }
+    const wh = (LV[w.top] - LV[w.fl]) - 2.2;
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(len - 1.2, wh), M.win);
+    const [cx, cz] = P(mx + nx * (th / 2 + 0.03), my + ny * (th / 2 + 0.03));
+    pl.position.set(cx, z0 + 1.1 + wh / 2, cz);
+    pl.lookAt(cx + nx, z0 + 1.1 + wh / 2, cz + ny);
+    storeys[SI(w.fl)].add(pl); wins.push(pl); extWalls.push(pl);
+  }
+}
+for (const p of g3.parapets) {
+  const [x0, y0, x1, y1] = p.p; const len = Math.hypot(x1 - x0, y1 - y0);
+  const [ax, az] = P(x0, y0), [bx, bz] = P(x1, y1);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(len + 0.2, 1.1, 0.2), M.ext);
+  m.position.set((ax + bx) / 2, LV[p.lv] + 0.55, (az + bz) / 2); m.rotation.y = -Math.atan2(bz - az, bx - ax);
+  m.castShadow = true; storeys[SI(p.lv)].add(m); addEdges(m); extWalls.push(m);
+}
+// 屋頂光電（頂層一半覆蓋）
+const pvGrp = new THREE.Group(); bld.add(pvGrp);
+for (const { s } of roofMeshes) {
+  const xs = s.poly[0].map(p => p[0]), ys = s.poly[0].map(p => p[1]);
+  const x0 = Math.min(...xs) + 2, x1 = Math.max(...xs) - 2, y0 = Math.min(...ys) + 2, y1 = Math.max(...ys) - 2;
+  for (let x = x0; x < x1 - 2; x += 4.2) {
+    const m = boxAt(pvGrp, x, y0, x + 3.4, y0 + (y1 - y0) * 0.55, H + 0.35, H + 0.5, M.pv, null); m.rotation.x = 0;
+  }
+}
+pvGrp.visible = false;
+// FRC 兩層高空間
+const frcGrp = new THREE.Group(); bld.add(frcGrp);
+boxAt(frcGrp, 30.2, 0.2, 59.8, 14.8, LV['3F'] + 0.05, LV.RF - 0.1, M.frc, null); frcGrp.visible = false;
+
+/* 量體比選：第一量體、第二量體 A（示意，依 11/09 比選 PDF） */
+const cmp = new THREE.Group(); scene.add(cmp); cmp.visible = false;
+const m1 = new THREE.Group(), m2 = new THREE.Group(); cmp.add(m1, m2);
+boxAt(m1, 0, 0, 60, 30, 0, 15.5, M.mass);
+boxAt(m2, 0, 0, 60, 30, 0, 10, M.mass); boxAt(m2, 0, 0, 60, 25, 10, 13.8, M.mass); boxAt(m2, 0, 0, 60, 20, 13.8, 18.6, M.mass); boxAt(m2, 30, 0, 60, 15, 18.6, 21.3, M.mass);
+flat(m2, 0.5, 25.2, 59.5, 29.5, M.green, 10.05); flat(m2, 0.5, 20.2, 59.5, 24.8, M.green, 13.85);
+const GAP = 80; m1.position.x = -2 * GAP; m2.position.x = -GAP;
+
+/* ---------- 標籤 ---------- */
+const labels = [];
+function label(html, x, y, z, cls, sets) {
+  const el = document.createElement('div'); el.className = 'lbl ' + (cls || ''); el.innerHTML = html;
+  const o = new CSS2DObject(el); const [X, Z] = P(x, y); o.position.set(X, z, Z); scene.add(o);
+  labels.push({ o, sets: new Set(sets) }); o.visible = false; return o;
+}
+label('第七工廠（北）', 30, -13, 16, '', ['site']);
+label('第四工廠（南）', 30, 44, 15, '', ['site']);
+label('校內通路（西）<br><small>唯一卸貨、吊裝面</small>', -8, 12, 2, '', ['site']);
+label('北 4.64 m', 8, -2.3, 1, 'dim', ['site']);
+label('南 5.75 m', 8, 32.9, 1, 'dim', ['site']);
+label('東 7.24 m', 63.6, 15, 1, 'dim', ['site']);
+label('建築外框 60 × 30 m', 30, 15, 1.5, 'big', ['site', 'nomass']);
+label('<b>第一量體</b>4 層方盒<br><small>7,200 m² · 約 5,000 萬</small>', 30 - 2 * GAP, 15, 22, 'big', ['cmp']);
+label('<b>第二量體 A</b>南向退台<br><small>6,300 m² · 約 5,000 萬</small>', 30 - GAP, 15, 26, 'big', ['cmp']);
+label('<b>第三量體 G3</b>L 形退台 ✓<br><small>5,850 m² · 約 4,610 萬</small>', 30, 15, 24, 'big win', ['cmp']);
+label('屋頂花園', 6, 20, LV['3F'] + 2.5, '', ['green']);
+label('退台綠化', 15, 7, LV['4F'] + 2.5, '', ['green']);
+label('FRC 兩層高', 45, 7.5, LV['4F'] + 1, '', ['frc']);
+label('屋頂光電', 40, 6, H + 2, '', ['pv']);
+// 量體範圍虛線
+const outline = (() => {
+  const pts = [[0, 0], [60, 0], [60, 30], [0, 30], [0, 0]].map(([x, y]) => { const [X, Z] = P(x, y); return new THREE.Vector3(X, 0.15, Z); });
+  const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), M.dash); l.computeLineDistances(); scene.add(l); return l;
+})();
+// 退距標示線
+const dimLines = new THREE.Group(); scene.add(dimLines);
+for (const [a, b] of [[[8, -4.64], [8, 0]], [[8, 30], [8, 35.75]], [[60, 15], [67.24, 15]]]) {
+  const pts = [a, b].map(([x, y]) => { const [X, Z] = P(x, y); return new THREE.Vector3(X, 0.2, Z); });
+  const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), M.dash); l.computeLineDistances(); dimLines.add(l);
+}
+
+/* ---------- 太陽（台北，北緯 25.05°） ---------- */
+const LAT = 25.05 * Math.PI / 180;
+function sunDir(declDeg, hour) {
+  const d = declDeg * Math.PI / 180, Hh = (hour - 12) * 15 * Math.PI / 180;
+  const sinA = Math.sin(LAT) * Math.sin(d) + Math.cos(LAT) * Math.cos(d) * Math.cos(Hh);
+  const alt = Math.asin(sinA);
+  const az = Math.atan2(Math.sin(Hh), Math.cos(Hh) * Math.sin(LAT) - Math.tan(d) * Math.cos(LAT)) + Math.PI; // 由北順時針
+  const e = Math.sin(az) * Math.cos(alt), n = Math.cos(az) * Math.cos(alt);
+  const v = EAST.clone().multiplyScalar(e).addScaledVector(NORTH, n); v.y = Math.sin(alt);
+  return { v, alt };
+}
+const sunPath = new THREE.Group(); scene.add(sunPath); sunPath.visible = false;
+const sunBall = new THREE.Mesh(new THREE.SphereGeometry(2.6, 20, 12), new THREE.MeshBasicMaterial({ color: 0xf0aa45 }));
+sunPath.add(sunBall);
+let pathLine = null;
+function buildSunPath(decl) {
+  if (pathLine) sunPath.remove(pathLine);
+  const pts = []; for (let h = 4; h <= 20; h += 0.1) { const s = sunDir(decl, h); if (s.alt > 0) pts.push(s.v.clone().multiplyScalar(120)); }
+  pathLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0xd9902b, dashSize: 3, gapSize: 2 }));
+  pathLine.computeLineDistances(); sunPath.add(pathLine);
+}
+const DEFAULT_SUN = sunDir(10, 14.5).v;
+
+/* ---------- 風（東北風） ---------- */
+const WN = 520, windPos = new Float32Array(WN * 6), windData = [];
+const windGeo = new THREE.BufferGeometry(); windGeo.setAttribute('position', new THREE.BufferAttribute(windPos, 3));
+const wind = new THREE.LineSegments(windGeo, new THREE.LineBasicMaterial({ color: 0x3f6fa8, transparent: true, opacity: 0.7 }));
+wind.visible = false; scene.add(wind);
+const WD = EAST.clone().add(NORTH).multiplyScalar(-1).normalize(); // 從東北吹向西南（真北）
+function resetW(i, first) {
+  const side = (Math.random() - 0.5) * 220, along = first ? (Math.random() - 0.5) * 220 : -110 - Math.random() * 20;
+  windData[i] = { p: new THREE.Vector3(-WD.z * side + WD.x * along, 1 + Math.random() * 26, WD.x * side + WD.z * along), v: 0.5 + Math.random() * 0.5 };
+}
+for (let i = 0; i < WN; i++) resetW(i, true);
+function stepWind(dt) {
+  const hasB = bld.visible && bldAlpha > 0.5;
+  for (let i = 0; i < WN; i++) {
+    const w = windData[i], sp = w.v * 28 * dt, p = w.p;
+    p.addScaledVector(WD, sp);
+    if (hasB) { const x = p.x + OX, y = p.z + OY; if (x > -4 && x < 64 && y > -4 && y < 34 && p.y < H + 3) p.y += sp * 0.9; else if (p.y > 3) p.y -= sp * 0.08; }
+    if (p.dot(WD) > 115) resetW(i, false);
+    const t = WD.clone().multiplyScalar(3 + w.v * 4);
+    windPos.set([p.x, p.y, p.z, p.x - t.x, p.y, p.z - t.z], i * 6);
+  }
+  windGeo.attributes.position.needsUpdate = true;
+}
+
+/* ---------- 主題 ---------- */
+const root = document.documentElement;
+let theme = (() => { try { return localStorage.getItem('showcase-theme'); } catch { return null; } })() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+let forceNight = false;
+const PAL = {
+  light: { bg: 0xebebe7, ground: 0xe4e4df, garden: 0xd3dcc6, road: 0xd2d2cc, ctx: 0xf4f4f1, slab: 0xf7f7f4, ext: 0xf2f2ee, int: 0xe7e7e2, win: 0x9fb3bf, winE: 0x000000, edge: 0x55554f, ctxEdge: 0x9a9a92, hemi: 1.15, sun: 2.1, leaf: 0x86ad5c, green: 0x8fb46a },
+  dark: { bg: 0x16181b, ground: 0x1d2024, garden: 0x1f2a22, road: 0x2a2d31, ctx: 0x2a2d32, slab: 0x34373c, ext: 0x2e3136, int: 0x3a3d42, win: 0xffc66b, winE: 0xffb648, edge: 0x6c6f74, ctxEdge: 0x4a4d52, hemi: 0.45, sun: 0.35, leaf: 0x3d5a35, green: 0x3f5f37 },
+};
+function applyPalette() {
+  const night = theme === 'dark' || forceNight, p = PAL[night ? 'dark' : 'light'];
+  scene.background = new THREE.Color(p.bg); scene.fog.color.set(p.bg);
+  for (const k of ['ground', 'garden', 'road', 'ctx', 'slab', 'ext', 'int', 'leaf', 'green']) M[k].color.set(p[k]);
+  M.mass.color.set(p.ext); M.massG3.color.set(p.ext);
+  M.win.color.set(p.win); M.win.emissive.set(p.winE); M.win.emissiveIntensity = night ? 1.3 : 0;
+  M.edge.color.set(p.edge); M.ctxEdge.color.set(p.ctxEdge);
+  hemi.intensity = p.hemi; sun.intensity = p.sun;
+  for (const m of satMats) m.color.set(night ? 0x4a4f58 : 0xf2f2ee);
+  hemi.groundColor.set(night ? 0x202326 : 0xcfcfc6);
+}
+function setTheme(t) { theme = t; root.dataset.theme = t; try { localStorage.setItem('showcase-theme', t); } catch { } applyPalette(); }
+setTheme(theme);
+
+/* ---------- 相機 ---------- */
+function camPose(az, el, dist, tx = 0, ty = 6, tz = 0) {
+  const a = az * Math.PI / 180, e = el * Math.PI / 180;
+  const narrow = innerWidth < 900 || innerHeight > innerWidth;
+  const d = dist * (narrow ? 1.45 : 1);
+  const t = new THREE.Vector3(tx, ty, tz);
+  // 桌機：模型往右偏，讓出左邊文字區
+  const shift = narrow ? new THREE.Vector3(0, d * 0.16, 0) : new THREE.Vector3(-Math.cos(a), 0, Math.sin(a)).multiplyScalar(-d * 0.16);
+  const tt = t.clone().sub(shift);
+  return { pos: new THREE.Vector3(tt.x + d * Math.sin(a) * Math.cos(e), tt.y + d * Math.sin(e), tt.z + d * Math.cos(a) * Math.cos(e)), tgt: tt };
+}
+let camAnim = null;
+function flyTo(pose, dur = 1800) {
+  camAnim = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pose.pos, t1: pose.tgt, s: performance.now(), dur };
+}
+
+/* ---------- 章節 ---------- */
+const bar = (name, val, max, txt, hl) => `<div class="bar${hl ? ' hl' : ''}"><span>${name}</span><span class="t"><i style="width:${Math.max(2, val / max * 100)}%"></i></span><span class="n">${txt}</span></div>`;
+const stat = (v, u, k, hl) => `<div class="stat${hl ? ' hl' : ''}"><div class="v">${v}<small>${u}</small></div><div class="k">${k}</div></div>`;
+const fig = (src, cap) => `<figure data-src="img/${src}.jpg" data-cap="${cap}"><img src="img/${src}.jpg" alt="${cap}" loading="lazy"><figcaption>${cap}</figcaption></figure>`;
+const eb = (i, txt) => `<div class="eyebrow"><span class="no">${String(i).padStart(2, '0')}</span>${txt}</div>`;
+
+function sparkSVG() {
+  if (!HIST.length) return '';
+  const vs = HIST.map(h => h.cost), mn = Math.min(...vs), mx = Math.max(...vs), W = 440, Hh = 110;
+  const xy = vs.map((v, i) => [i / (vs.length - 1) * W, 10 + (1 - (v - mn) / (mx - mn || 1)) * (Hh - 30)]);
+  const d = xy.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const last = xy[xy.length - 1];
+  return `<svg class="spark" viewBox="0 0 ${W} ${Hh + 10}" preserveAspectRatio="none" role="img" aria-label="近 12 個月混凝土成本走勢">
+    <path d="${d} L ${W} ${Hh} L 0 ${Hh} Z" fill="var(--accent-soft)" opacity=".7"/>
+    <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--accent)"/>
+    <text x="0" y="${Hh + 10}" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono">${HIST[0].month}</text>
+    <text x="${W}" y="${Hh + 10}" font-size="11" fill="var(--muted)" text-anchor="end" font-family="IBM Plex Mono">${HIST[HIST.length - 1].month}</text>
+    <text x="0" y="10" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono">${wan(mx)} 萬</text>
+  </svg>`;
+}
+
+const totalCarbon = V.carbon_tco2e + (R.carbon ? R.carbon.tco2e : 0);
+const els = V.elements || {};
+const volMax = Math.max(...['floors', 'columns', 'beams'].map(k => (els[k] || {}).volume || 0));
+
+const CH = [
+  { k: '封面', cam: [-38, 34, 560, 0, 0, 0], rot: true, sets: [], html: () => `
+    ${eb(0, '台北市南港區｜校內希望花園')}
+    <h1>技能選手<br>訓練大樓</h1>
+    <p class="lead">${TITLE_SUB}</p>
+    <p class="sub">以 BIM 分析引導設計：基地日照、風與微氣候分析 → 三量體比選 → 用 Revit 明細表與政府開放資料自動估算成本與碳排。</p>
+    <div class="rule"></div>
+    <div class="stats">${stat('60×30', 'm', '建築外框')}${stat(fmt(GFA_TOTAL), 'm²', 'G3 總樓地板')}${stat(H.toFixed(1), 'm', '4 層，屋頂高度')}</div>
+    <p class="hint">按 → 或空白鍵開始，F 全螢幕；三維畫面可拖曳旋轉、雙指縮放。</p>` },
+
+  { k: '緣起', cam: [28, 16, 154], night: true, sets: [], dur: 14, html: () => `
+    ${eb(1, '選手訓練現況問卷｜22 份、7 科')}
+    <h2>晚上八點以後，<br>工廠的燈還亮著</h2>
+    <p class="lead">技能競賽選手和一般學生共用工廠，練習集中在放學後與假日。我們發問卷給各科選手，結果顯示需要一棟<em>能單獨開放、晚上也安全好用</em>的訓練大樓。</p>
+    <div class="rule"></div>
+    <div class="bars">
+      ${bar('練到 20:00 以後', 77, 100, '77%', true)}
+      ${bar('每週練 3 天以上', 95, 100, '95%')}
+      ${bar('假日幾乎每週回校', 55, 100, '55%')}
+      ${bar('住校', 32, 100, '32%')}
+      ${bar('與一般學生共用工廠', 27, 100, '27%')}
+      ${bar('練到 22:00 以後', 27, 100, '27%')}
+    </div>
+    <p class="note">2026-11-09～11-13 Google 表單，由各科科主任轉發；樣本小，汽車、模具科無回覆。</p>` },
+
+  { k: '基地', cam: [8, 64, 304, 4, 0, 6], sets: ['site'], dims: true, bld: 0.25, html: () => `
+    ${eb(2, '基地條件｜希望花園')}
+    <h2>夾在兩棟工廠之間的<br>一塊花園</h2>
+    <p class="lead">建築外框 60 × 30 m，北側離第七工廠約 4.64 m、南側離第四工廠約 5.75 m，東側約 7.24 m。<em>只有西側校內通路</em>能卸貨與吊裝。</p>
+    <div class="rule"></div>
+    <div class="stats">${stat('93,517', 'm²', '校地（全校同一基地）')}${stat('35 / 240', '%', '法定建蔽 / 容積')}${stat('≥ 50', '%', '綠覆率')}</div>
+    <p class="sub" style="margin-top:18px">全校現況建蔽約 25.75%、容積約 97.25%，容積不是限制。南北間距 3～6 m，依建築技術規則外牆需 30 分鐘防火時效＋防火門窗。</p>
+    <p class="note">法規判讀多項仍待老師與總務處確認。周邊建物量體為示意。</p>` },
+
+  { k: '夏至日照', cam: [10, 34, 240, 0, 4, 0], sets: [], sunAnim: 23.44, html: () => `
+    ${eb(3, '日照分析｜夏至 6/21')}
+    <h2>夏至：<br>全區日照 9 小時以上</h2>
+    <p class="lead">台灣夏天太陽幾乎在頭頂，兩側工廠的陰影短，基地<em>不缺日照，反而要防曬</em>。右邊是依台北緯度即時算的太陽軌跡與陰影<span class="timechip" id="clock">--:--</span></p>
+    <div class="rule"></div>
+    <div class="figs">${fig('sun-summer', 'Forma 日照時數｜夏至（無量體）')}${fig('micro-july', 'Forma 微氣候｜七月正午氣溫')}</div>
+    <p class="note">Autodesk Forma 2026-10-31 分析；三維陰影為本頁依太陽位置公式即時模擬。</p>` },
+
+  { k: '冬至日照', cam: [-20, 40, 224, 0, 4, 0], sets: ['green'], sunAnim: -23.44, html: () => `
+    ${eb(4, '日照分析｜冬至 12/21')}
+    <h2>冬至：<br>花園還有 5～7 小時陽光</h2>
+    <p class="lead">冬天太陽低，南側第四工廠的影子拉長。G3 把<em>花園放在西南角、屋頂退台朝南</em>，冬至 +10 m 的屋頂花園仍有 5～7 小時日照，座位放西半部。<span class="timechip" id="clock">--:--</span></p>
+    <div class="rule"></div>
+    <div class="figs one">${fig('sun-winter', 'Forma 日照時數｜冬至（無量體）')}</div>` },
+
+  { k: '風向', cam: [40, 30, 272, 0, 4, 0], sets: ['nomass'], wind: true, bld: 0, html: () => `
+    ${eb(5, '風環境｜盛行風')}
+    <h2>東北風占 39%，<br>是最主要的風</h2>
+    <p class="lead">Forma 風環境分析顯示，基地全年以<em>東北風（NE 45°）</em>為主，常見風速約 4 m/s。設計時要讓建築擋住東北風，讓戶外空間在背風面。</p>
+    <div class="rule"></div>
+    <div class="figs one">${fig('wind', 'Forma 風環境｜流線（無量體）')}</div>
+    <p class="note">右側動畫為示意流線，不是模擬結果。</p>` },
+
+  { k: '風舒適', cam: [45, 26, 192, 0, 6, 0], sets: ['green'], wind: true, html: () => `
+    ${eb(6, '風環境｜Lawson 舒適度')}
+    <h2>L 形擋風，<br>花園在背風面</h2>
+    <p class="lead">G3 把 FRC 機器人場地放在東北角、做成兩層高的 L 形，擋住北側與東側的風，西南角的花園與退台達到<em>「靜坐／站立」等級</em>，不用另外加擋風屏。</p>
+    <div class="rule"></div>
+    <div class="stats">${stat('79 / 20 / 1', '%', '地面風（Lawson 嚴格）各等級占比')}${stat('0', '座', '需要的擋風屏', true)}</div>
+    <div class="figs one" style="margin-top:18px">${fig('wind-lawson', 'Forma 風舒適度 Lawson（無量體）')}</div>` },
+
+  { k: '微氣候', cam: [-10, 50, 240, 0, 2, 0], sets: ['nomass'], bld: 0, heat: true, html: () => `
+    ${eb(7, '微氣候｜夏季熱壓力')}
+    <h2>夏天很熱，<br>遮蔭有用</h2>
+    <p class="lead">七月正午整片基地都在高溫區，有樹蔭和建築陰影的地方明顯比較涼。所以戶外空間要<em>搭配植栽與遮蔭</em>，屋頂做綠化也能降低頂樓溫度。</p>
+    <div class="rule"></div>
+    <div class="figs one">${fig('micro-july', 'Forma 微氣候｜七月正午的氣溫（無量體）')}</div>` },
+
+  { k: '太陽能', cam: [-30, 52, 160, 0, 10, 0], sets: ['pv'], pv: true, html: () => `
+    ${eb(8, '能源｜屋頂光電潛力')}
+    <h2>頂層屋頂<br>一年約 13 萬度電</h2>
+    <p class="lead">G3 頂層屋頂 1,275 m²，用一半面積放太陽能板，另一半留給設備與維修，估計<em>每年約 132,000 kWh</em>。</p>
+    <div class="rule"></div>
+    <div class="stats">${stat('1,275', 'm²', '頂層屋頂')}${stat('50', '%', '光電覆蓋（假設）')}${stat('13.2', '萬 kWh', '年發電量（估）', true)}</div>
+    <div class="figs one" style="margin-top:18px">${fig('solar', 'Forma 太陽能分析（無量體，屋頂潛力）')}</div>` },
+
+  { k: '量體比選', cam: [0, 24, 470, -GAP * 1.1, 8, 0], sets: ['cmp'], compare: true, html: () => `
+    ${eb(9, '三量體比選｜依分析結果')}
+    <h2>三個量體，<br>只有 G3 三項都過關</h2>
+    <p class="lead">把基地分析的結論變成三個條件：<em>省空間、省成本、能綠化</em>。三案外框一樣是 60 × 30 m，用同一套單價比較。</p>
+    <div class="rule"></div>
+    <table class="cmp"><thead><tr><th></th><th>第一量體</th><th>第二量體 A</th><th>G3</th></tr></thead><tbody>
+      <tr><td>總樓地板</td><td>7,200</td><td>6,300</td><td class="win">5,850</td></tr>
+      <tr><td>最高（m）</td><td>15.5</td><td>21.3</td><td class="win">17.6</td></tr>
+      <tr><td>綠化平台（m²）</td><td>0</td><td>600</td><td class="win">525</td></tr>
+      <tr><td>平台風環境</td><td>–</td><td>需擋風屏</td><td class="win">靜坐／站立</td></tr>
+      <tr><td>材料費（萬）</td><td>5,000</td><td>5,000</td><td class="win">4,610</td></tr>
+    </tbody></table>
+    <p class="note">材料級差額比較（混凝土 2,600 元/m³、鋼筋 18,750 元/t、模板 600 元/m²，不含工資）；綠屋頂單價 4,500 元/m² 為假設。第一、第二量體為示意量體。</p>` },
+
+  { k: '成本系統', cam: [30, 24, 192, 0, 9, 0], sets: [], explode: true, xray: true, html: () => `
+    ${eb(10, 'BIM 成本自動估算｜5D')}
+    <h2>模型一改，<br>成本自動重算</h2>
+    <p class="lead">我們做了一個網站，把 Revit 明細表的體積乘上<em>政府每月公布的最新單價</em>，每週自動更新，不用再手動查價。</p>
+    <div class="rule"></div>
+    <div class="flow">
+      <div class="st"><span class="d">1</span><div><b>Revit／Forma 匯出數量</b><p>結構柱、梁、樓板明細表（類別、樓層、類型、體積）</p></div></div>
+      <div class="st"><span class="d">2</span><div><b>參數映射</b><p>自動辨認欄位與類型名稱，B1-450x750 → 45X75 對照鋼筋比</p></div></div>
+      <div class="st hl"><span class="d">3</span><div><b>抓政府開放資料</b><p>工程會混凝土、鋼筋價格 × 主計總處營造物價指數；環境部碳足跡係數</p></div></div>
+      <div class="st"><span class="d">4</span><div><b>GitHub Actions 每週一自動計算</b><p>偵測模型改版，自動建立 V1、V2… 版本</p></div></div>
+      <div class="st"><span class="d">5</span><div><b>網頁儀表板</b><p>成本、鋼筋、碳排、12 個月走勢、版本比較、樓層分區</p></div></div>
+    </div>
+    <p class="note">右側 3D 為 G3 量體示意；以下成本數字來自 10 月的結構練習模型（${V.version}）。</p>` },
+
+  { k: '混凝土', cam: [55, 22, 168, 0, 8, 0], sets: [], xray: true, slabHL: true, html: () => `
+    ${eb(11, '混凝土｜體積 × 最新單價')}
+    <h2>混凝土<br>${wan(V.cost_at_current_price)} 萬元</h2>
+    <p class="lead">樓板、柱、梁共 <em>${fmt(V.total_volume, 1)} m³</em>，280 kgf/cm² 預拌混凝土，北區 ${PRICE_MONTH} 單價每 m³ ${fmt(PRICE280)} 元。</p>
+    <div class="rule"></div>
+    <div class="bars">
+      ${bar('樓板', (els.floors || {}).volume || 0, volMax, fmt((els.floors || {}).volume || 0), true)}
+      ${bar('梁', (els.beams || {}).volume || 0, volMax, fmt((els.beams || {}).volume || 0))}
+      ${bar('柱', (els.columns || {}).volume || 0, volMax, fmt((els.columns || {}).volume || 0))}
+    </div>
+    <div class="legend"><span>單位 m³</span></div>
+    <p class="note">單價 = 工程會「大宗資材之混凝土價格調查」基準價 × 主計總處營造工程物價指數（水泥及其製品類）調整。</p>` },
+
+  { k: '鋼筋', cam: [120, 20, 168, 0, 8, 0], sets: [], xray: true, slabHL: true, html: () => `
+    ${eb(12, '鋼筋｜鋼筋比 × 體積')}
+    <h2>鋼筋 ${fmt(R.gross_weight_t, 1)} 噸，<br>${wan(R.cost)} 萬元</h2>
+    <p class="lead">依構件類型套用鋼筋比（例如柱 75×75 為 188.5 kg/m³），再加 10% 損耗與搭接。鋼筋單價 SD420W 每噸 <em>${fmt(R.price)} 元</em>。</p>
+    <div class="rule"></div>
+    <div class="stats">${stat(wan(V.cost_at_current_price), '萬', '混凝土')}${stat(wan(R.cost), '萬', '鋼筋')}${stat(wan(R.total_cost || (V.cost_at_current_price + R.cost)), '萬', '合計', true)}</div>
+    <p class="note">鋼筋比來自練習配筋，是練習假設，不是正式結構設計；材料費不含工資。</p>` },
+
+  { k: '單價走勢', cam: [170, 24, 184, 0, 8, 0], rot: true, sets: [], xray: true, html: () => `
+    ${eb(13, '單價走勢｜同一個模型 × 每個月的單價')}
+    <h2>同一棟樓，<br>每個月價錢不一樣</h2>
+    <p class="lead">用目前模型的數量乘上過去 12 個月的單價，就能看出<em>何時發包比較划算</em>。最新 ${HIST.length ? HIST[HIST.length - 1].month : ''}：${HIST.length ? wan(HIST[HIST.length - 1].cost) : '-'} 萬元。</p>
+    <div class="rule"></div>
+    ${sparkSVG()}
+    <p class="note">混凝土成本；網站每週一自動抓取最新指數。</p>` },
+
+  { k: '碳排放', cam: [-120, 22, 176, 0, 8, 0], sets: ['green'], xray: true, html: () => `
+    ${eb(14, '6D 永續｜蘊含碳')}
+    <h2>蓋這些結構<br>排放約 ${fmt(totalCarbon)} 噸 CO₂e</h2>
+    <p class="lead">混凝土每 m³ 約 ${fmt(CF280)} kgCO₂e、鋼筋每 kg 約 ${R.carbon ? R.carbon.factor : 0.834} kgCO₂e，係數取自<em>環境部碳足跡資料庫</em>。</p>
+    <div class="rule"></div>
+    <div class="bars">
+      ${bar('混凝土', V.carbon_tco2e, totalCarbon, fmt(V.carbon_tco2e), true)}
+      ${bar('鋼筋', R.carbon ? R.carbon.tco2e : 0, totalCarbon, fmt(R.carbon ? R.carbon.tco2e : 0))}
+    </div>
+    <div class="legend"><span>單位 tCO₂e</span></div>
+    <p class="note">評估方式參照建研所《低碳建築評估手冊》；目前含混凝土與鋼筋，尚未含模板與施工機具。</p>` },
+
+  { k: '版本比較', cam: [-60, 30, 176, 0, 8, 0], sets: [], explode: true, xray: true, html: () => `
+    ${eb(15, '版本比較｜模型每次改版都留紀錄')}
+    <h2>改一次模型，<br>就知道差多少</h2>
+    <p class="lead">系統偵測到體積檔變動，就自動建立新版本，列出每版的數量、成本與碳排<em>增減</em>，設計討論時有數字可以看。</p>
+    <div class="rule"></div>
+    <table class="cmp"><thead><tr><th></th>${VERS.map(v => `<th>${v.version}</th>`).join('')}<th>增減</th></tr></thead><tbody>
+      <tr><td>混凝土（m³）</td>${VERS.map(v => `<td>${fmt(v.total_volume)}</td>`).join('')}<td class="win">${fmt(VERS.at(-1).total_volume - VERS[0].total_volume)}</td></tr>
+      <tr><td>成本（萬）</td>${VERS.map(v => `<td>${wan(v.cost_at_current_price)}</td>`).join('')}<td class="win">${wan(VERS.at(-1).cost_at_current_price - VERS[0].cost_at_current_price)}</td></tr>
+      <tr><td>碳排（t）</td>${VERS.map(v => `<td>${fmt(v.carbon_tco2e)}</td>`).join('')}<td class="win">${fmt(VERS.at(-1).carbon_tco2e - VERS[0].carbon_tco2e)}</td></tr>
+    </tbody></table>
+    <p class="note">成本以目前單價重算各版本，才能公平比較。混凝土部分。</p>` },
+
+  { k: '現場試算', cam: [-20, 40, 460, 0, 0, 0], rot: true, sets: [], dur: 20, html: () => `
+    ${eb(16, '動手試試看')}
+    <h2>掃 QR code，<br>自己操作成本網站</h2>
+    <p class="lead">放入新的 Revit 明細表或 Forma 匯出 Excel，網站會用最新單價<em>當場重算</em>成本、鋼筋與碳排，也能依樓層或構件分區。</p>
+    <button class="btn" id="openDash">開啟成本儀表板 →</button>
+    <div class="qrs">
+      <div class="qr"><div id="qr1"></div>成本儀表板</div>
+      <div class="qr"><div id="qr2"></div>這個展示網頁</div>
+    </div>
+    <p class="note">下一步：模型完成後加入各樓層空間配置、結構柱網與綠建築 EEWH 驗證。</p>` },
+];
+
+/* ---------- 導覽 ---------- */
+const nav = document.getElementById('nav'), panel = document.getElementById('panel');
+CH.forEach((c, i) => {
+  const b = document.createElement('button');
+  b.innerHTML = `<span class="n">${String(i).padStart(2, '0')}</span><span class="t">${c.k}</span><span class="pg"></span>`;
+  b.onclick = () => { go(i); poke(); }; nav.appendChild(b);
+});
+document.getElementById('srcnote').textContent = `模型：G3 量體（LOD 100，2026-11-23 Dynamo 自動建模）｜周邊建物 © OpenStreetMap 貢獻者｜影像 Esri, Maxar, Earthstar Geographics｜成本：結構練習模型 ${V.version}，${PRICE_MONTH} 單價`;
+
+let cur = -1, bldAlpha = 1, bldTarget = 1, explodeT = 0, explodeTarget = 0, sunAnim = null, sunHour = 6;
+function setOpacity(mats, o) { for (const m of mats) { m.transparent = o < 1; m.opacity = o; m.depthWrite = o >= 1; } }
+function go(i) {
+  i = (i + CH.length) % CH.length; if (i === cur) return; cur = i;
+  const c = CH[i];
+  panel.innerHTML = `<div class="slide">${c.html()}</div>`; panel.scrollTop = 0;
+  [...nav.children].forEach((b, j) => b.classList.toggle('on', j === i));
+  nav.children[i].scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  try { history.replaceState(null, '', '#' + i); } catch { }
+  // 場景狀態
+  forceNight = !!c.night; applyPalette();
+  bldTarget = c.bld ?? 1;
+  explodeTarget = c.explode ? 1 : 0;
+  cmp.visible = !!c.compare; ctx.visible = southF.visible = !c.compare && !c.xray; trees.visible = !c.compare; gardenGrp.visible = !!c.heat;
+  wind.visible = !!c.wind; pvGrp.visible = !!c.pv;
+  outline.visible = !!c.dims || c.bld === 0; dimLines.visible = !!c.dims;
+  frcGrp.visible = false;
+  setOpacity([M.ext, M.win], c.xray ? 0.16 : 1); setOpacity([M.int], c.xray ? 0.5 : 1);
+  M.slab.color.set(c.slabHL ? (theme === 'dark' ? 0x8a6a3a : 0xf0c88a) : PAL[(theme === 'dark' || forceNight) ? 'dark' : 'light'].slab);
+  M.garden.color.set(c.heat ? (theme === 'dark' ? 0x5a3a22 : 0xf1c79a) : PAL[(theme === 'dark' || forceNight) ? 'dark' : 'light'].garden);
+  for (const l of labels) l.o.visible = c.sets.some(s => l.sets.has(s)) && !(l.sets.has('nomass') && c.bld !== 0 && !l.sets.has('site'));
+  if (c.sunAnim !== undefined) { buildSunPath(c.sunAnim); sunPath.visible = true; sunAnim = c.sunAnim; sunHour = 6; }
+  else { sunPath.visible = false; sunAnim = null; setSun(DEFAULT_SUN); }
+  const [az, el, dist, tx, ty, tz] = c.cam; flyTo(camPose(az, el, dist, tx ?? 0, ty ?? 6, tz ?? 0));
+  rotating = !!c.rot;
+  // 互動元件
+  panel.querySelectorAll('figure').forEach(f => f.onclick = () => openLB(f.dataset.src, f.dataset.cap));
+  const od = panel.querySelector('#openDash'); if (od) od.onclick = openDash;
+  if (panel.querySelector('#qr1')) { drawQR('qr1', SITE_URL + '#project=builtin'); drawQR('qr2', SHOW_URL); }
+  blip(); startTimer();
+}
+function setSun(v) { sun.position.copy(v).multiplyScalar(260); sun.target.position.set(0, 0, 0); }
+function drawQR(id, text) {
+  if (typeof qrcode !== 'function') return;
+  const q = qrcode(0, 'M'); q.addData(text); q.make();
+  document.getElementById(id).innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+}
+
+/* lightbox / 儀表板 */
+const lb = document.getElementById('lightbox'), dash = document.getElementById('dash');
+function openLB(src, cap) { lb.querySelector('img').src = src; lb.querySelector('.cap').textContent = cap; lb.classList.add('on'); pauseAuto(); }
+function openDash() { const f = dash.querySelector('iframe'); if (!f.src) f.src = DASH_URL; dash.classList.add('on'); pauseAuto(); }
+for (const o of [lb, dash]) { o.querySelector('.x').onclick = () => o.classList.remove('on'); o.addEventListener('click', e => { if (e.target === o) o.classList.remove('on'); }); }
+
+/* ---------- 自動播放、閒置、音效 ---------- */
+const bAuto = document.getElementById('bAuto'), bSound = document.getElementById('bSound');
+let auto = false, timer = null, tStart = 0, idleT = null, soundOn = false, actx = null, rotating = false;
+const IDLE_MS = 60000;
+function durOf(i) { return (CH[i].dur || 12) * 1000; }
+function startTimer() { clearTimeout(timer); tStart = performance.now(); if (auto) timer = setTimeout(() => go(cur + 1), durOf(cur)); }
+function setAuto(on) { auto = on; bAuto.setAttribute('aria-pressed', on); bAuto.textContent = on ? '自動播放 中' : '自動播放'; startTimer(); }
+function pauseAuto() { if (auto) setAuto(false); }
+bAuto.onclick = () => { setAuto(!auto); };
+function poke() { clearTimeout(idleT); idleT = setTimeout(() => { if (!auto && !lb.classList.contains('on') && !dash.classList.contains('on')) { go(0); setAuto(true); } }, IDLE_MS); if (auto) startTimer(); }
+['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(e => addEventListener(e, poke, { passive: true }));
+bSound.onclick = () => { soundOn = !soundOn; bSound.setAttribute('aria-pressed', soundOn); bSound.textContent = soundOn ? '音效 開' : '音效 關'; if (soundOn) { actx = actx || new AudioContext(); blip(); } };
+function blip() {
+  if (!soundOn || !actx) return;
+  const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine'; o.frequency.value = 660;
+  o.frequency.exponentialRampToValueAtTime(990, actx.currentTime + 0.08);
+  g.gain.setValueAtTime(0.0001, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.08, actx.currentTime + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.25);
+  o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + 0.3);
+}
+document.getElementById('bTheme').onclick = () => { setTheme(theme === 'dark' ? 'light' : 'dark'); const c = cur; cur = -1; go(c); };
+const bFull = document.getElementById('bFull');
+bFull.onclick = toggleFull;
+function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); }
+document.getElementById('bPrev').onclick = () => go(cur - 1);
+document.getElementById('bNext').onclick = () => go(cur + 1);
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea')) return;
+  if (e.key === 'Escape') { lb.classList.remove('on'); dash.classList.remove('on'); return; }
+  if (dash.classList.contains('on')) return;
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(cur + 1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(cur - 1); }
+  else if (e.key === 'Home') go(0);
+  else if (e.key === 'f' || e.key === 'F') toggleFull();
+});
+// 在文字區左右滑動換章（觸控）
+let sx = null, sy = null;
+panel.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+panel.addEventListener('touchend', e => { if (sx === null) return; const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy; if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) go(cur + (dx < 0 ? 1 : -1)); sx = null; }, { passive: true });
+controls.addEventListener('start', () => { rotating = false; camAnim = null; });
+
+/* ---------- 迴圈 ---------- */
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); labelR.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', () => { resize(); const c = CH[cur]; if (c) { const [az, el, dist, tx, ty, tz] = c.cam; flyTo(camPose(az, el, dist, tx ?? 0, ty ?? 6, tz ?? 0), 600); } });
+resize();
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const compass = document.querySelector('#compass svg');
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (camAnim) {
+    const k = Math.min(1, (now - camAnim.s) / camAnim.dur), e = ease(k);
+    camera.position.lerpVectors(camAnim.p0, camAnim.p1, e); controls.target.lerpVectors(camAnim.t0, camAnim.t1, e);
+    if (k >= 1) camAnim = null;
+  } else if (rotating) {
+    const t = controls.target, off = camera.position.clone().sub(t); off.applyAxisAngle(new THREE.Vector3(0, 1, 0), dt * 0.05); camera.position.copy(t).add(off);
+  }
+  controls.update();
+  // 量體淡入淡出、樓層拆開
+  bldAlpha += (bldTarget - bldAlpha) * Math.min(1, dt * 4);
+  bld.visible = bldAlpha > 0.02;
+  const solid = bldAlpha > 0.97;
+  for (const m of [M.slab, M.green, M.leaf]) { m.transparent = !solid; m.opacity = bldAlpha; }
+  if (!CH[cur]?.xray) { M.ext.transparent = M.win.transparent = M.int.transparent = !solid; M.ext.opacity = M.win.opacity = M.int.opacity = bldAlpha; M.ext.depthWrite = solid; }
+  M.edge.opacity = 0.55 * bldAlpha;
+  explodeT += (explodeTarget - explodeT) * Math.min(1, dt * 3);
+  storeys.forEach((g, i) => g.position.y = explodeT * i * 5);
+  pvGrp.position.y = explodeT * 4 * 5;
+  // 太陽
+  if (sunAnim !== null) {
+    sunHour += dt * 1.1; if (sunHour > 18.5) sunHour = 5.5;
+    const s = sunDir(sunAnim, sunHour);
+    if (s.alt > 0.02) { setSun(s.v); sunBall.position.copy(s.v).multiplyScalar(120); sunBall.visible = true; sun.intensity = PAL[theme === 'dark' ? 'dark' : 'light'].sun * Math.min(1, s.alt * 4) + 0.1; }
+    else sunBall.visible = false;
+    const ck = document.getElementById('clock'); if (ck) { const h = Math.floor(sunHour), m = Math.floor((sunHour - h) * 60); ck.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+  }
+  if (wind.visible) stepWind(dt);
+  // 指北針
+  const az = Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
+  compass.style.transform = `rotate(${(az + SITE.rot) * 180 / Math.PI}deg)`;
+  // 自動播放進度
+  if (auto && nav.children[cur]) nav.children[cur].querySelector('.pg').style.width = Math.min(100, (now - tStart) / durOf(cur) * 100) + '%';
+  [...nav.children].forEach((b, j) => { if (j !== cur || !auto) b.querySelector('.pg').style.width = '0'; });
+  renderer.render(scene, camera); labelR.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+const start = parseInt(location.hash.slice(1));
+const p0 = camPose(-60, 55, 900, 0, 0, 0); camera.position.copy(p0.pos); controls.target.copy(p0.tgt);
+go(Number.isFinite(start) ? start : 0);
+document.getElementById('loading').style.opacity = 0;
+poke();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
