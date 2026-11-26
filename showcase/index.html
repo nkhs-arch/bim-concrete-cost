@@ -806,7 +806,7 @@ function go(i) {
   nav.children[i].scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
   try { history.replaceState(null, '', '#' + i); } catch { }
   // 場景狀態
-  forceNight = !!c.night; applyPalette();
+  forceNight = !!c.night; root.dataset.theme = forceNight ? 'dark' : theme; applyPalette();
   bldTarget = c.bld ?? 1;
   explodeTarget = c.explode ? 1 : 0;
   cmp.visible = !!c.compare; ctx.visible = southF.visible = !c.compare && !c.xray; trees.visible = !c.compare; gardenGrp.visible = !!c.heat;
