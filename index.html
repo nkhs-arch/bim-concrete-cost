@@ -38,6 +38,9 @@
         /* 讓圖表在視窗縮小時跟著縮，不撐出水平捲軸 */
         main > div, .grid > * { min-width: 0; }
     </style>
+    <style>
+        body.hide-out-rebar #rebar-section, body.hide-out-carbon #carbon-section { display: none !important; }
+    </style>
 </head>
 <body class="bg-dark-bg text-slate-200 font-sans antialiased min-h-screen flex flex-col">
 
@@ -199,6 +202,33 @@
                 </div>
                 <p data-official class="text-[11px] text-emerald-300/80">要讓大家都看到：按「下載 quantities.csv」，再到 GitHub 的 data 資料夾上傳覆蓋同名檔案（data 裡如果有 quantities.xlsx 要刪掉），約 1 分鐘後網站會自動建立新版本。</p>
             </div>
+        </div>
+
+        <!-- 計算成果：勾選要算的項目，依樓層或構件分區 -->
+        <div id="zone-section" class="hidden bg-dark-card border border-dark-border rounded-xl p-5">
+            <div class="flex flex-wrap gap-3 items-start justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-white flex items-center"><i class="fa-solid fa-layer-group mr-2 text-cyan-400"></i>計算成果與分區</h3>
+                    <p class="text-xs text-slate-400 mt-1">勾選要算的成果，再選分組方式。<span id="zone-model"></span></p>
+                </div>
+                <label class="text-xs text-slate-300 flex items-center gap-2">分組
+                    <select id="zone-group" class="bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs text-white">
+                        <option value="all">整棟</option>
+                        <option value="level">依樓層</option>
+                        <option value="category">依構件類別</option>
+                        <option value="level-category">依樓層＋構件</option>
+                    </select>
+                </label>
+            </div>
+            <div id="zone-outputs" class="flex flex-wrap gap-2 text-xs mb-4"></div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead id="zone-head" class="text-slate-400 border-b border-dark-border"></thead>
+                    <tbody id="zone-body" class="divide-y divide-dark-border"></tbody>
+                    <tfoot id="zone-foot" class="border-t-2 border-dark-border font-semibold"></tfoot>
+                </table>
+            </div>
+            <p id="zone-note" class="text-[11px] text-slate-500 mt-3"></p>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -586,6 +616,7 @@
             }
 
             setupUpload();
+            setupZones();
             setupHome();
             // 網址後面有 #project=… 就直接開那個專案（重新整理不會跳回主畫面），否則先顯示主畫面
             const id = new URLSearchParams(location.hash.slice(1)).get('project');
@@ -604,6 +635,7 @@
             renderVersionButtons();
             showVersion(data.versions.length - 1);
             renderRebar();
+            renderZones();
             renderLogs();
             renderChangelog();
         }
@@ -1376,6 +1408,7 @@
                     if (mapping) { try { localStorage.setItem(MAPPING_LOCAL_KEY, JSON.stringify(mapping)); } catch {} }
                     applyUpload(file, elements, types, calc);
                     uploaded = { name: file.name, lines };
+                    zoneLines = lines; zoneCalc = calc;
                 }
                 rerender();
                 document.getElementById('upload-hint').innerText = `已載入：${file.name}（可再放入其他檔案）`;
@@ -1637,6 +1670,7 @@
             data.logs = logs;
             data.is_sample = false;
             uploaded = { name: latest.model_name, lines: project.versions[project.versions.length - 1].lines };
+            zoneLines = uploaded.lines; zoneCalc = calc;
         }
 
         async function openProject(id) {
@@ -1658,7 +1692,10 @@
             document.getElementById('home').classList.add('hidden');
             document.getElementById('dashboard').classList.remove('hidden');
 
-            if (!isBuiltin) {
+            if (isBuiltin) {
+                zoneCalc = await loadCalcConfig();
+                zoneLines = await loadBuiltinLines(zoneCalc);
+            } else {
                 try {
                     applyProject(currentProject, await loadCalcConfig());
                 } catch (e) {
@@ -1837,6 +1874,7 @@
             renderVersionButtons();
             showVersion(data.versions.length - 1);
             renderRebar();
+            renderZones();
             renderLogs();
         }
 
@@ -1850,6 +1888,136 @@
             a.download = 'quantities.csv';
             a.click();
             URL.revokeObjectURL(a.href);
+        }
+
+
+        // ---------- 計算成果與分區：每一列明細 × 單價，依樓層或構件類別加總 ----------
+        const OUTPUTS = [
+            { key: 'concrete', label: '混凝土', icon: 'fa-cube', color: 'text-cyan-400' },
+            { key: 'rebar', label: '鋼筋', icon: 'fa-grip-lines', color: 'text-orange-400' },
+            { key: 'carbon', label: '碳排放', icon: 'fa-leaf', color: 'text-emerald-400' },
+            { key: 'formwork', label: '模板', soon: true },
+            { key: 'brick', label: '磚（含耗材）', soon: true },
+        ];
+        const OUTPUTS_KEY = 'bim-outputs';
+        const ZONE_GROUP_KEY = 'bim-zone-group';
+        let zoneLines = null, zoneCalc = null;
+
+        function readOutputs() {
+            try { const v = JSON.parse(localStorage.getItem(OUTPUTS_KEY) || 'null'); if (v) return v; } catch {}
+            return { concrete: true, rebar: true, carbon: true };
+        }
+        function saveLocal(key, v) { try { localStorage.setItem(key, typeof v === 'string' ? v : JSON.stringify(v)); } catch {} }
+
+        // 選手大樓的正式資料只有各類別合計，分區要讀 data/quantities.csv 的逐列明細
+        async function loadBuiltinLines(calc) {
+            try {
+                const res = await fetch('data/quantities.csv', { cache: 'no-store' });
+                if (!res.ok) return null;
+                const file = new File([await res.arrayBuffer()], 'quantities.csv');
+                const sh = (await readSheets(file))[0];
+                return parseQuantities(sheetToTable(sh.rows, detectHeader(sh.rows)), calc.grades || {}).lines;
+            } catch { return null; }
+        }
+
+        const levelSort = (a, b) => {
+            const n = x => { const m = String(x).match(/B(\d+)|(\d+)|R/i); return !m ? 999 : m[1] ? -m[1] : m[2] ? +m[2] : 500; };
+            return n(a) - n(b) || String(a).localeCompare(String(b));
+        };
+
+        function computeZones(lines, calc, group) {
+            const rb = data.rebar_official || data.rebar;
+            const cf = data.carbon_factors || {};
+            const groups = {};
+            let missingRatio = false;
+            for (const l of lines) {
+                const key = classify(l.category);
+                if (!key) continue;
+                const grade = parseGrade(l.spec) || String(calc.grades?.[key] ?? '280');
+                const volume = toNumber(l.volume);
+                const ratio = calc.rebar_ratios?.[key]?.[l.type];
+                if (rb && l.type && ratio == null && Object.keys(calc.rebar_ratios?.[key] || {}).length) missingRatio = true;
+                const rebarT = rb && ratio ? volume * ratio / 1000 * (1 + rb.loss_rate) : 0;
+                const level = String(l.level || '').trim() || '未分區';
+                const label = group === 'all' ? '整棟' : group === 'level' ? level
+                    : group === 'category' ? KEY_LABEL[key] : `${level}｜${KEY_LABEL[key]}`;
+                const sortKey = group === 'category' ? ORDER.indexOf(key) : group === 'level-category' ? [level, ORDER.indexOf(key)] : level;
+                const g = groups[label] ??= { label, sortKey, volume: 0, concrete: 0, rebarT: 0, rebarCost: 0, carbon: 0 };
+                g.volume += volume;
+                g.concrete += volume * priceFor({ grade }, data.prices);
+                g.rebarT += rebarT;
+                g.rebarCost += rb ? rebarT * rb.price : 0;
+                g.carbon += volume * ((cf[grade] ?? cf['280'])?.factor || 0) / 1000 + (rb?.carbon ? rebarT * rb.carbon.factor : 0);
+            }
+            const rows = Object.values(groups).sort((a, b) => {
+                if (group === 'category') return a.sortKey - b.sortKey;
+                if (group === 'level-category') return levelSort(a.sortKey[0], b.sortKey[0]) || a.sortKey[1] - b.sortKey[1];
+                return levelSort(a.sortKey, b.sortKey);
+            });
+            return { rows, missingRatio, hasRebar: !!rb && lines.some(l => l.type) };
+        }
+
+        function renderZones() {
+            const box = document.getElementById('zone-section');
+            const outputs = readOutputs();
+            document.body.classList.toggle('hide-out-rebar', !outputs.rebar);
+            document.body.classList.toggle('hide-out-carbon', !outputs.carbon);
+            if (!zoneLines || !zoneLines.length || !zoneCalc) { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+
+            document.getElementById('zone-outputs').innerHTML = OUTPUTS.map(o => o.soon
+                ? `<span class="px-2.5 py-1 rounded-lg border border-dark-border text-slate-600" title="第 3 階段加入"><i class="fa-regular fa-square mr-1"></i>${o.label}（即將推出）</span>`
+                : `<label class="cursor-pointer px-2.5 py-1 rounded-lg border ${outputs[o.key] ? 'border-cyan-700 bg-cyan-950/40 text-white' : 'border-dark-border text-slate-400'}">
+                    <input type="checkbox" data-out="${o.key}" class="mr-1 align-middle" ${outputs[o.key] ? 'checked' : ''}><i class="fa-solid ${o.icon} ${o.color} mr-1"></i>${o.label}</label>`).join('');
+
+            const groupSel = document.getElementById('zone-group');
+            let group = 'level';
+            try { group = localStorage.getItem(ZONE_GROUP_KEY) || 'level'; } catch {}
+            groupSel.value = group;
+
+            const { rows, missingRatio, hasRebar } = computeZones(zoneLines, zoneCalc, group);
+            const showRebar = outputs.rebar && hasRebar;
+            const cols = [
+                { h: '分區', cls: 'text-white font-medium', v: r => esc(r.label) },
+                { h: '體積 m³', right: true, cls: 'text-cyan-400', v: r => r.volume.toLocaleString('en-US', { maximumFractionDigits: 2 }) },
+                outputs.concrete && { h: '混凝土', right: true, v: r => nt(r.concrete) },
+                showRebar && { h: '鋼筋 t', right: true, cls: 'text-orange-400', v: r => r.rebarT.toFixed(1) },
+                showRebar && { h: '鋼筋', right: true, v: r => nt(r.rebarCost) },
+                (outputs.concrete || showRebar) && { h: '小計', right: true, cls: 'text-amber-300 font-semibold', v: r => nt((outputs.concrete ? r.concrete : 0) + (showRebar ? r.rebarCost : 0)) },
+                outputs.carbon && { h: 'tCO₂e', right: true, cls: 'text-emerald-400', v: r => r.carbon.toFixed(1) },
+            ].filter(Boolean);
+            // 碳排只算勾選的材料：沒勾鋼筋時扣掉鋼筋碳排
+            if (outputs.carbon && !showRebar && hasRebar) {
+                const rb = data.rebar_official || data.rebar;
+                cols[cols.length - 1].v = r => (r.carbon - (rb?.carbon ? r.rebarT * rb.carbon.factor : 0)).toFixed(1);
+            }
+            const td = (c, x) => `<td class="p-2.5 ${c.right ? 'text-right font-mono' : ''} ${c.cls || ''}">${c.v(x)}</td>`;
+            document.getElementById('zone-head').innerHTML = `<tr>${cols.map(c => `<th class="p-2.5 ${c.right ? 'text-right' : ''}">${c.h}</th>`).join('')}</tr>`;
+            document.getElementById('zone-body').innerHTML = rows.map(r => `<tr class="hover:bg-dark-hover transition">${cols.map(c => td(c, r)).join('')}</tr>`).join('');
+            const total = rows.reduce((t, r) => { for (const k of ['volume', 'concrete', 'rebarT', 'rebarCost', 'carbon']) t[k] += r[k]; return t; },
+                { label: '合計', volume: 0, concrete: 0, rebarT: 0, rebarCost: 0, carbon: 0 });
+            document.getElementById('zone-foot').innerHTML = rows.length > 1 ? `<tr>${cols.map(c => td(c, total)).join('')}</tr>` : '';
+
+            const latest = data.versions[data.versions.length - 1];
+            document.getElementById('zone-model').innerText = `以目前模型 ${latest.version} 計算。`;
+            const notes = [];
+            if (group.startsWith('level') && rows.some(r => r.label.startsWith('未分區'))) notes.push('「未分區」是檔案裡沒有樓層／位置資料的構件；Takeoff 匯出時可在計量套件加上「位置」或「樓層」。');
+            if (showRebar && missingRatio) notes.push('有類型對不到鋼筋比，該部分鋼筋以 0 計（可按「調整欄位對照」補上）。');
+            if (outputs.rebar && !hasRebar) notes.push('這個檔案沒有類型欄，算不了鋼筋。');
+            notes.push('碳排只含勾選的材料；單價、鋼筋比、係數與下方各區相同。');
+            document.getElementById('zone-note').innerText = notes.join(' ');
+        }
+
+        function setupZones() {
+            document.getElementById('zone-outputs').addEventListener('change', e => {
+                const k = e.target.dataset.out;
+                if (!k) return;
+                const o = readOutputs();
+                o[k] = e.target.checked;
+                saveLocal(OUTPUTS_KEY, o);
+                renderZones();
+            });
+            document.getElementById('zone-group').addEventListener('change', e => { saveLocal(ZONE_GROUP_KEY, e.target.value); renderZones(); });
         }
 
         function setupUpload() {
