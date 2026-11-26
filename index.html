@@ -151,6 +151,24 @@
         </div>
     </div>
 
+    <!-- 參數映射：檔案欄位、類型名稱對照成網站認得的格式 -->
+    <div id="mapping-dialog" class="hidden fixed inset-0 z-[60] bg-black/70 items-center justify-center p-4">
+        <div class="bg-dark-card border border-dark-border rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col text-xs">
+            <div class="p-4 border-b border-dark-border">
+                <h3 class="text-sm font-semibold text-white"><i class="fa-solid fa-table-list mr-2 text-cyan-400"></i>欄位與類型對照</h3>
+                <p class="text-slate-400 mt-1"><span id="mapping-file" class="text-slate-200"></span>：每個專案匯出的欄位、類型名稱不同，請確認下面的對照（黃色是需要你看一下的）。確定後會記在這個專案，下次上傳自動套用。</p>
+            </div>
+            <div id="mapping-body" class="p-4 overflow-y-auto space-y-2 flex-1"></div>
+            <div class="p-4 border-t border-dark-border flex flex-col sm:flex-row sm:items-center gap-3">
+                <div id="mapping-status" class="flex-1"></div>
+                <div class="flex gap-2 justify-end">
+                    <button id="mapping-cancel" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition">取消</button>
+                    <button id="mapping-ok" class="bg-gradient-to-r from-emerald-600 to-cyan-600 text-white px-4 py-1.5 rounded-lg transition">確定，開始計算</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <main id="dashboard" class="hidden flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
         <div id="load-error" class="hidden bg-rose-950/60 border border-rose-800 text-rose-300 text-sm rounded-xl p-4"></div>
@@ -174,6 +192,7 @@
             <div id="upload-result" class="hidden mt-3 bg-emerald-950/40 border border-emerald-800 text-emerald-200 text-xs rounded-lg p-3 space-y-2">
                 <div id="upload-summary"></div>
                 <div class="flex flex-wrap gap-2">
+                    <button id="upload-remap" class="hidden bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-table-list mr-1"></i>調整欄位對照</button>
                     <button id="upload-download" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-download mr-1"></i>下載 quantities.csv</button>
                     <a id="upload-github" data-official href="#" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-brands fa-github mr-1"></i>上傳到 GitHub 存成新版本</a>
                     <button data-official onclick="location.reload()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-rotate-left mr-1"></i>還原網站資料</button>
@@ -870,12 +889,12 @@
         const COLUMN_ALIASES = {
             // 新版 Takeoff 有時匯出簡體欄位名稱，一併接受
             category: ['計量類型', '類別', '構件類別', '计量类型', '类别', '构件类别', 'Takeoff type', 'Category', 'Classification'],
-            spec: ['材質', '規格', '材料', '材质', '规格', 'Material'],
+            spec: ['材質', '結構材料', '規格', '材料', '材质', '规格', 'Material', 'Structural Material'],
             volume: ['體積 (M3)', '體積', '體積(m3)', '體積 (m³)', '体积 (M3)', '体积', '体积(m3)', 'Volume (M3)', 'Volume'],
             count: ['個數', '个数', 'Count'],
             item: ['行項名稱', '行项名称', 'Item name'],
-            type: ['類型', '族群與類型', '类型', '族与类型', 'Type'],
-            level: ['樓層', '位置', '楼层', '标高', 'Level'],
+            type: ['類型', '族群與類型', '类型', '族与类型', 'Type', 'Family and Type'],
+            level: ['樓層', '參考樓層', '基準樓層', '位置', '楼层', '标高', 'Level', 'Reference Level', 'Base Level'],
         };
         const VOLUME_ITEMS = ['體積', '体积', 'volume'];
         const CATEGORY_KEYWORDS = {
@@ -895,7 +914,8 @@
 
         const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         const r2 = n => Math.round(n * 100) / 100;
-        const toNumber = v => parseFloat(String(v ?? '').replace(/[^\d.\-]/g, '')) || 0;
+        // 只取第一個數字：「863.44 m³」「1,234.5」都可以，不會把 m3 的 3 接進去
+        const toNumber = v => parseFloat((String(v ?? '').replace(/,/g, '').match(/-?\d+(\.\d+)?/) || [])[0]) || 0;
         const pick = (row, field) => {
             for (const name of COLUMN_ALIASES[field]) if (row[name] !== undefined && row[name] !== '') return row[name];
             return null;
@@ -915,8 +935,8 @@
             });
         }
 
-        // 回傳每一頁的表格，逐構件明細頁排最前面
-        async function readTables(file) {
+        // 回傳每一頁的原始列（陣列），逐構件明細頁排最前面
+        async function readSheets(file) {
             if (!window.XLSX) await loadScript(XLSX_URL);
             const buf = await file.arrayBuffer();
             let wb;
@@ -932,14 +952,29 @@
             // Takeoff 匯出檔第一頁是摘要，逐構件明細在「詳細資料 - …」（簡體版「详细信息 - …」）那一頁
             const isDetail = n => /^(詳細資料|詳細資訊|详细信息|详细资料|Details)/i.test(n);
             const names = [...wb.SheetNames.filter(isDetail), ...wb.SheetNames.filter(n => !isDetail(n))];
-            return names.map(name => {
-                const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: true })
+            return names.map(name => ({
+                name,
+                rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: true })
                     .map(r => r.map(c => String(c ?? '').trim()))
-                    .filter(r => r.some(c => c));
-                if (rows.length < 2) return [];
-                const header = rows[0];
-                return rows.slice(1).map(r => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ''])));
-            }).filter(t => t.length);
+                    .filter(r => r.some(c => c)),
+            })).filter(sh => sh.rows.length >= 2);
+        }
+
+        // 標題列不一定在第一列（Revit 明細表上面還有一列表名），取前 15 列裡認得最多欄位名稱的那列
+        function detectHeader(rows) {
+            const known = new Set(Object.values(COLUMN_ALIASES).flat().concat(Object.values(SUMMARY_ALIASES).flat()));
+            let best = 0, bestHits = -1;
+            rows.slice(0, 15).forEach((r, i) => {
+                // 認得的欄位名稱優先；都不認得時取填最滿的那列（表名那列通常只有一格）
+                const hits = r.filter(c => known.has(c)).length * 100 + r.filter(Boolean).length;
+                if (hits > bestHits) { best = i; bestHits = hits; }
+            });
+            return best;
+        }
+
+        function sheetToTable(rows, headerIdx) {
+            const header = rows[headerIdx] || [];
+            return rows.slice(headerIdx + 1).map(r => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ''])));
         }
 
         // 摘要頁轉成一般明細格式：「樓板 - 體積」那列的數量就是樓板體積
@@ -954,16 +989,6 @@
                 out.push({ '計量類型': m[1], '體積 (M3)': String(get(row, 'quantity') ?? '0'), '個數': String(get(row, 'count') ?? '0') });
             }
             return out;
-        }
-
-        // 先找逐構件明細，找不到再用摘要頁
-        function parseAnyQuantities(tables, grades) {
-            let lastError;
-            for (const t of [...tables, ...tables.map(summaryToTable)]) {
-                if (!t.length) continue;
-                try { return parseQuantities(t, grades); } catch (e) { lastError = e; }
-            }
-            throw lastError || new Error('檔案裡沒有資料列');
         }
 
         function parseQuantities(table, grades) {
@@ -998,6 +1023,302 @@
             return { elements, types: Object.values(types), lines: Object.values(lines) };
         }
 
+        // ---------- 參數映射：每個專案匯出的欄位、類型名稱不同，先對照成網站認得的格式再計算 ----------
+        // 對照結果（mapping）存在專案裡，下次同專案上傳自動套用：
+        //   columns: 網站欄位 → 檔案欄位名稱；fixed: 沒有類別欄時整份檔案的構件類別
+        //   categories: 檔案的類別值 → floors/columns/beams/walls/skip
+        //   types: 「類別|原始類型」→ rebar.json 的類型；空字串表示用 ratios 自填的鋼筋比
+        //   ratios: 自填鋼筋比 { beams: { 'B1-60X90': 150 } }
+        const MAP_FIELDS = [
+            { key: 'category', label: '構件類別', hint: '例如 樓板、結構柱、結構樑' },
+            { key: 'volume', label: '體積 (m³)', required: true },
+            { key: 'type', label: '類型', hint: '用來對照鋼筋比' },
+            { key: 'count', label: '個數' },
+            { key: 'level', label: '樓層／區域' },
+            { key: 'spec', label: '材質／強度', hint: '例如 280 kgf/cm²' },
+            { key: 'item', label: '行項名稱', hint: 'Takeoff 才有' },
+        ];
+        const CANON_CATEGORY = { floors: '樓板', columns: '結構柱', beams: '結構樑', walls: '牆' };
+        const KEY_LABEL = { floors: '樓板', columns: '柱', beams: '梁', walls: '牆', skip: '不計算' };
+        const MAPPING_LOCAL_KEY = 'bim-mapping-builtin';
+
+        const emptyMapping = () => ({ sheet: 0, header: 0, columns: {}, fixed: '', categories: {}, types: {}, ratios: {} });
+        const ratiosWith = (calc, m) => {
+            const out = {};
+            for (const k of new Set([...Object.keys(calc.rebar_ratios || {}), ...Object.keys(m?.ratios || {})]))
+                out[k] = { ...(calc.rebar_ratios?.[k] || {}), ...(m?.ratios?.[k] || {}) };
+            return out;
+        };
+        const calcWith = (calc, m) => ({ ...calc, rebar_ratios: ratiosWith(calc, m) });
+
+        // 從類型名稱讀尺寸：B1-450x750、RC梁 45×75、C1(75X75)、S1 150mm、樓板 15cm
+        function parseDims(key, raw) {
+            const text = String(raw || '').replace(/×|＊|\*/g, 'x');
+            const toCm = (nums, unitText) => {
+                const mm = /mm|公釐|毫米/i.test(unitText) || (!/cm|公分/i.test(unitText) && Math.min(...nums) >= 100);
+                const m = !mm && Math.max(...nums) < 5;   // 0.45x0.75 (公尺)
+                return nums.map(n => Math.round(mm ? n / 10 : m ? n * 100 : n));
+            };
+            if (key === 'beams' || key === 'columns') {
+                const mt = text.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*(mm|cm|公分|公釐)?/i);
+                if (!mt) return null;
+                const [w, h] = toCm([+mt[1], +mt[2]], mt[3] || text);
+                return { label: `${w}X${h}`, dims: [w, h] };
+            }
+            if (key === 'floors' || key === 'walls') {
+                const all = [...text.matchAll(/(\d+(?:\.\d+)?)\s*(mm|cm|公分|公釐)?/gi)];
+                if (!all.length) return null;
+                const mt = all.find(x => x[2]) || all.reduce((a, b) => (+b[1] > +a[1] ? b : a));
+                const [t] = toCm([+mt[1]], mt[2] || '');
+                return { label: `${t}cm`, dims: [t] };
+            }
+            return null;
+        }
+
+        // 自填鋼筋比用的類型名稱：讀得出尺寸就用尺寸（B9 600x900 → 60X90），同尺寸的其他類型也會對到
+        const customKey = (key, raw) => parseDims(key, raw)?.label || normalizeType(raw);
+
+        // 自動對照類型：完全一樣 → 從尺寸讀出來的 → 最接近的尺寸（要人確認）
+        function autoType(key, raw, ratios) {
+            const table = ratios[key] || {};
+            const norm = normalizeType(raw);
+            if (!raw) return { to: '', status: 'empty' };
+            if (table[norm] != null) return { to: norm, status: 'exact' };
+            const d = parseDims(key, raw);
+            if (d && table[d.label] != null) return { to: d.label, status: 'parsed' };
+            if (d) {
+                let best = null, bestDist = Infinity;
+                for (const k of Object.keys(table)) {
+                    const kd = parseDims(key, k);
+                    if (!kd || kd.dims.length !== d.dims.length) continue;
+                    const dist = kd.dims.reduce((s, v, i) => s + Math.abs(v - d.dims[i]), 0);
+                    if (dist < bestDist) { best = k; bestDist = dist; }
+                }
+                if (best) return { to: best, status: 'near', label: d.label };
+            }
+            return { to: '', status: 'none', label: d?.label };
+        }
+
+        // 猜欄位：先用別名清單，再用沿用的對照（欄位名稱還在才用）
+        function guessMapping(sheets, fileName, saved) {
+            // 有明細頁就用明細頁；每頁都算一次，取認得最多欄位的那頁
+            let best = null;
+            sheets.forEach((sh, si) => {
+                const header = detectHeader(sh.rows);
+                const names = sh.rows[header];
+                const columns = {};
+                for (const f of MAP_FIELDS) {
+                    const keep = saved?.columns?.[f.key];
+                    columns[f.key] = keep && names.includes(keep) ? keep : (COLUMN_ALIASES[f.key].find(a => names.includes(a)) || '');
+                }
+                const score = Object.values(columns).filter(Boolean).length + (columns.volume ? 5 : 0);
+                if (!best || score > best.score) best = { score, sheet: si, header, columns };
+            });
+            const m = { ...emptyMapping(), ...(saved || {}), sheet: best.sheet, header: best.header, columns: best.columns };
+            m.categories = { ...(saved?.categories || {}) };
+            m.types = { ...(saved?.types || {}) };
+            m.ratios = JSON.parse(JSON.stringify(saved?.ratios || {}));
+            if (!m.columns.category) {
+                // 沒有類別欄（例如 Revit「結構梁明細表」）：從表名、工作表名、檔名判斷
+                const sh = sheets[best.sheet];
+                const above = sh.rows.slice(0, best.header).flat().join(' ');
+                m.fixed = classify(above) || classify(sh.name) || classify(fileName) || saved?.fixed || '';
+            } else m.fixed = '';
+            return m;
+        }
+
+        // 照對照表把檔案轉成網站的標準欄位，並列出類別、類型的對照狀態
+        function evaluateMapping(sheets, m, calc) {
+            const sh = sheets[m.sheet];
+            const header = sh.rows[m.header] || [];
+            const col = f => (m.columns[f] ? header.indexOf(m.columns[f]) : -1);
+            const idx = Object.fromEntries(MAP_FIELDS.map(f => [f.key, col(f.key)]));
+            const ratios = ratiosWith(calc, m);
+            const cats = {}, types = {}, rows = [];
+            for (const r of sh.rows.slice(m.header + 1)) {
+                const get = f => (idx[f] >= 0 ? r[idx[f]] ?? '' : '');
+                const item = get('item');
+                if (idx.item >= 0 && item && !VOLUME_ITEMS.includes(item.trim().toLowerCase())) continue;
+                const volume = toNumber(get('volume'));
+                const rawCat = idx.category >= 0 ? get('category') : '';
+                const key = idx.category >= 0 ? (m.categories[rawCat] || classify(rawCat) || 'skip') : (m.fixed || 'skip');
+                if (idx.category >= 0) {
+                    const c = cats[rawCat] ??= { raw: rawCat, key, auto: !m.categories[rawCat], volume: 0 };
+                    c.volume += volume;
+                }
+                if (key === 'skip') continue;
+                const rawType = get('type');
+                const tk = key + '|' + rawType;
+                const t = types[tk] ??= { id: tk, key, raw: rawType, volume: 0, ...autoType(key, rawType, ratios) };
+                t.volume += volume;
+                rows.push({ key, rawType, level: get('level'), spec: get('spec'), count: idx.count >= 0 ? get('count') : '1', volume });
+            }
+            // 類型對照結果：手動指定的優先
+            for (const t of Object.values(types)) {
+                const manual = m.types[t.id];
+                if (manual === undefined) continue;
+                t.status = 'manual';
+                t.to = manual || customKey(t.key, t.raw);
+            }
+            const typeList = Object.values(types);
+            const hasRatios = k => Object.keys(ratios[k] || {}).length > 0;
+            const flagged = typeList.filter(t => hasRatios(t.key) && (t.status === 'near' || t.status === 'none'));
+            let error = '';
+            if (idx.volume < 0) error = '請指定哪一欄是體積';
+            else if (idx.category < 0 && !m.fixed) error = '沒有構件類別欄，請選這份檔案是哪一類構件';
+            else if (!rows.length) error = '照目前的對照找不到任何樓板、柱、梁或牆';
+            const table = rows.map(x => {
+                const t = types[x.key + '|' + x.rawType];
+                const to = t.status === 'empty' ? '' : (t.status === 'near' || t.status === 'none') ? normalizeType(x.rawType) : t.to;
+                return { '計量類型': CANON_CATEGORY[x.key], '樓層': x.level, '類型': to, '材質': x.spec, '個數': String(x.count), '體積 (M3)': String(x.volume) };
+            });
+            return { header, cats: Object.values(cats), typeList, flagged, error, table, ratios };
+        }
+
+        // 對照畫面：對不到的標黃色，讓人選；按確定才計算
+        function openMappingDialog(sheets, m, calc, fileName) {
+            return new Promise((resolve, reject) => {
+                const box = document.getElementById('mapping-dialog');
+                const body = document.getElementById('mapping-body');
+                const okBtn = document.getElementById('mapping-ok');
+                document.getElementById('mapping-file').innerText = fileName;
+                const opt = (v, label, sel) => `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(label)}</option>`;
+                const sel = 'bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs text-white max-w-full';
+                const vol = n => r2(n).toLocaleString('en-US');
+                const STATUS = {
+                    exact: ['text-emerald-400', '名稱相同'], parsed: ['text-emerald-400', '從尺寸讀出'], manual: ['text-cyan-400', '已指定'],
+                    near: ['text-amber-300', '最接近的尺寸，請確認'], none: ['text-amber-300', '對不到，請選或自填'], empty: ['text-slate-500', '沒有類型'],
+                };
+
+                const render = () => {
+                    const ev = evaluateMapping(sheets, m, calc);
+                    const headers = ev.header.filter(Boolean);
+                    let html = '';
+                    if (sheets.length > 1) {
+                        html += `<div class="flex items-center gap-2"><span class="text-slate-400 w-24 shrink-0">工作表</span><select data-k="sheet" class="${sel}">${sheets.map((s, i) => opt(i, s.name, i === m.sheet)).join('')}</select></div>`;
+                    }
+                    html += `<div class="flex items-center gap-2"><span class="text-slate-400 w-24 shrink-0">標題在第幾列</span><select data-k="header" class="${sel}">${sheets[m.sheet].rows.slice(0, 15).map((r, i) => opt(i, `第 ${i + 1} 列：${r.filter(Boolean).slice(0, 4).join('、')}`, i === m.header)).join('')}</select></div>`;
+
+                    html += `<h4 class="text-white font-semibold mt-4 mb-2">1. 欄位對照</h4><div class="grid sm:grid-cols-2 gap-2">`;
+                    for (const f of MAP_FIELDS) {
+                        const v = m.columns[f.key] || '';
+                        const warn = f.required && !v;
+                        html += `<label class="flex items-center gap-2 ${warn ? 'bg-amber-950/50 rounded px-1' : ''}"><span class="w-24 shrink-0 ${warn ? 'text-amber-300' : 'text-slate-300'}">${f.label}${f.required ? ' *' : ''}</span>
+                            <select data-col="${f.key}" class="${sel} flex-1">${opt('', '（沒有這欄）', !v)}${headers.map(h => opt(h, h, h === v)).join('')}</select></label>`;
+                    }
+                    html += `</div>`;
+                    if (!m.columns.category) {
+                        const warn = !m.fixed;
+                        html += `<label class="flex items-center gap-2 mt-2 ${warn ? 'bg-amber-950/50 rounded px-1' : ''}"><span class="w-24 shrink-0 ${warn ? 'text-amber-300' : 'text-slate-300'}">整份都是</span>
+                            <select data-k="fixed" class="${sel}">${opt('', '請選擇', !m.fixed)}${['floors', 'columns', 'beams', 'walls'].map(k => opt(k, KEY_LABEL[k], k === m.fixed)).join('')}</select>
+                            <span class="text-slate-500">檔案沒有類別欄，例如 Revit 的單一構件明細表</span></label>`;
+                    }
+
+                    if (ev.cats.length) {
+                        html += `<h4 class="text-white font-semibold mt-4 mb-2">2. 類別對照</h4><div class="grid sm:grid-cols-2 gap-2">`;
+                        for (const c of ev.cats) {
+                            const warn = c.key === 'skip' && c.auto && c.volume > 0;
+                            html += `<label class="flex items-center gap-2 ${warn ? 'bg-amber-950/50 rounded px-1' : ''}"><span class="flex-1 truncate ${warn ? 'text-amber-300' : 'text-slate-300'}" title="${esc(c.raw)}">${esc(c.raw || '（空白）')} <span class="text-slate-500">${vol(c.volume)} m³</span></span>
+                                <select data-cat="${esc(c.raw)}" class="${sel}">${Object.keys(KEY_LABEL).map(k => opt(k, KEY_LABEL[k], k === c.key)).join('')}</select></label>`;
+                        }
+                        html += `</div>`;
+                    }
+
+                    const typed = ev.typeList.filter(t => t.status !== 'empty');
+                    if (typed.length) {
+                        html += `<h4 class="text-white font-semibold mt-4 mb-1">3. 類型對照（鋼筋比）</h4>
+                            <p class="text-slate-500 mb-2">網站先從類型名稱讀出尺寸，對到 rebar.json 裡的鋼筋比。對不到的可以選最接近的類型，或選「自填」輸入 kg/m³（填 0 表示不算鋼筋）。</p>
+                            <div class="overflow-x-auto"><table class="w-full text-left"><thead class="text-slate-500"><tr><th class="p-1.5">類別</th><th class="p-1.5">檔案裡的類型</th><th class="p-1.5 text-right">體積 m³</th><th class="p-1.5">對照到</th><th class="p-1.5">狀態</th></tr></thead><tbody class="divide-y divide-dark-border">`;
+                        for (const t of typed) {
+                            const table = ev.ratios[t.key] || {};
+                            const keys = Object.keys(table);
+                            const warn = keys.length && (t.status === 'near' || t.status === 'none');
+                            const custom = t.status === 'manual' && m.types[t.id] === '';
+                            const norm = customKey(t.key, t.raw);
+                            const [cls, text] = STATUS[t.status];
+                            let cell;
+                            if (!keys.length) cell = '<span class="text-slate-500">此類別目前不算鋼筋</span>';
+                            else {
+                                const current = custom ? '#custom' : (t.status === 'none' ? '' : t.to);
+                                cell = `<select data-type="${esc(t.id)}" class="${sel}">${t.status === 'none' ? opt('', '請選擇', true) : ''}`
+                                    + keys.filter(k => !(m.ratios[t.key] && k in m.ratios[t.key])).map(k => opt(k, `${k}（${table[k]} kg/m³）`, !custom && k === current)).join('')
+                                    + opt('#custom', '自填鋼筋比…', custom) + `</select>`
+                                    + (custom ? ` <input data-ratio="${esc(t.id)}" type="number" min="0" step="0.1" value="${m.ratios[t.key]?.[norm] ?? ''}" class="${sel} w-20"> kg/m³` : '');
+                            }
+                            html += `<tr class="${warn ? 'bg-amber-950/40' : ''}"><td class="p-1.5 text-slate-300">${KEY_LABEL[t.key]}</td><td class="p-1.5 text-white">${esc(t.raw)}${t.label && t.label !== t.to ? ` <span class="text-slate-500">→ ${t.label}</span>` : ''}</td>
+                                <td class="p-1.5 text-right text-cyan-400">${vol(t.volume)}</td><td class="p-1.5">${cell}</td><td class="p-1.5 ${cls}">${text}</td></tr>`;
+                        }
+                        html += `</tbody></table></div>`;
+                    }
+
+                    const total = ev.table.reduce((s, x) => s + toNumber(x['體積 (M3)']), 0);
+                    document.getElementById('mapping-status').innerHTML = ev.error
+                        ? `<span class="text-amber-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${ev.error}</span>`
+                        : `<span class="text-emerald-300">可以計算：${ev.table.length} 列，總體積 ${vol(total)} m³` + (ev.flagged.length ? `；還有 ${ev.flagged.length} 個類型待確認（不確認的話以最接近的類型計，對不到的鋼筋以 0 計）` : '') + '</span>';
+                    okBtn.disabled = !!ev.error;
+                    okBtn.classList.toggle('opacity-50', !!ev.error);
+                    body.innerHTML = html;
+                };
+
+                body.onchange = e => {
+                    const el = e.target, d = el.dataset;
+                    if (d.k === 'sheet') { Object.assign(m, guessMapping([sheets[+el.value]], fileName, m)); m.sheet = +el.value; }
+                    else if (d.k === 'header') m.header = +el.value;
+                    else if (d.k === 'fixed') m.fixed = el.value;
+                    else if (d.col) m.columns[d.col] = el.value;
+                    else if (d.cat !== undefined) m.categories[d.cat] = el.value;
+                    else if (d.type) {
+                        const [key, ...rest] = d.type.split('|');
+                        const norm = customKey(key, rest.join('|'));
+                        if (m.ratios[key]) delete m.ratios[key][norm];
+                        if (el.value === '#custom') { m.types[d.type] = ''; (m.ratios[key] ??= {})[norm] = 0; }
+                        else m.types[d.type] = el.value;
+                    } else if (d.ratio) {
+                        const [key, ...rest] = d.ratio.split('|');
+                        (m.ratios[key] ??= {})[customKey(key, rest.join('|'))] = Math.max(0, toNumber(el.value));
+                    }
+                    render();
+                };
+                const close = () => { box.classList.add('hidden'); box.classList.remove('flex'); body.onchange = null; };
+                okBtn.onclick = () => {
+                    const ev = evaluateMapping(sheets, m, calc);
+                    if (ev.error) return;
+                    // 「最接近」的類型沒改就照建議存起來，下次不用再問
+                    for (const t of ev.flagged) if (t.status === 'near') m.types[t.id] = t.to;
+                    close();
+                    resolve(m);
+                };
+                document.getElementById('mapping-cancel').onclick = () => { close(); reject(new Error('已取消欄位對照')); };
+                render();
+                box.classList.remove('hidden');
+                box.classList.add('flex');
+            });
+        }
+
+        const savedMapping = () => {
+            if (currentProject) return currentProject.mapping || null;
+            try { return JSON.parse(localStorage.getItem(MAPPING_LOCAL_KEY) || 'null'); } catch { return null; }
+        };
+
+        // 讀檔 → 對照 → 標準欄位。自動對照有問題（或 force）時跳出對照畫面
+        async function mapQuantityFile(file, calc, { saved = savedMapping(), force = false } = {}) {
+            const sheets = await readSheets(file);
+            if (!sheets.length) throw new Error('檔案裡沒有資料列');
+            const m = guessMapping(sheets, file.name, saved);
+            const ev = evaluateMapping(sheets, m, calc);
+            if (!force && ev.error) {
+                // Takeoff「Inventory」摘要頁：沒有類型，直接用舊規則
+                for (const sh of sheets) {
+                    try {
+                        const t = summaryToTable(sheetToTable(sh.rows, detectHeader(sh.rows)));
+                        if (t.length) { parseQuantities(t, calc.grades || {}); return { table: t, mapping: saved }; }
+                    } catch {}
+                }
+            }
+            const mapping = force || ev.error || ev.flagged.length ? await openMappingDialog(sheets, m, calc, file.name) : m;
+            return { table: evaluateMapping(sheets, mapping, calc).table, mapping };
+        }
+
         async function loadCalcConfig() {
             // build_data.py 會把計算需要的設定放在 data.json 的 calc；舊的 data.json 沒有時，直接讀 data/ 裡的原始檔
             if (data.calc) return data.calc;
@@ -1017,12 +1338,15 @@
         const carbonOf = elements => Object.values(elements).reduce(
             (s, el) => s + el.volume * (data.carbon_factors[el.grade] ?? data.carbon_factors['280']).factor, 0) / 1000;
 
-        async function handleUpload(file) {
+        let lastUploadFile = null;   // 給「調整欄位對照」重開用
+
+        async function handleUpload(file, { force = false } = {}) {
             const errBox = document.getElementById('upload-error');
             errBox.classList.add('hidden');
             document.getElementById('upload-hint').innerText = `讀取中：${file.name}…`;
             try {
-                const { elements, types, lines, calc, saved } = await readQuantityFile(file);
+                const { elements, types, lines, calc, saved, mapping } = await readQuantityFile(file, { force });
+                lastUploadFile = file;
                 if (currentProject) {
                     // 自建專案：存成新版本
                     const pid = currentProject.id;
@@ -1030,10 +1354,13 @@
                     await commitProjects(list => {
                         const p = list.find(x => x.id === pid);
                         if (!p) throw new Error('這個專案已經被刪除了');
+                        // 調整同一個檔案的對照時，取代最後一版，不另外加版本
+                        if (force && p.versions.length && p.versions[p.versions.length - 1].file === saved.file) p.versions.pop();
                         p.versions.push(saved);
+                        if (mapping) p.mapping = mapping;
                         p.updated_at = today();
                         return list;
-                    }, `專案「${currentProject.name}」新增 V${currentProject.versions.length + 1}：${file.name}`);
+                    }, `專案「${currentProject.name}」${force ? '調整對照' : '新增 V' + (currentProject.versions.length + 1)}：${file.name}`);
                     currentProject = findProject(pid);
                     applyProject(currentProject, calc);
                     const v = data.versions[data.versions.length - 1];
@@ -1046,11 +1373,13 @@
                     document.getElementById('upload-desc').innerText =
                         `放入這個專案新版本的體積檔，會存成 V${currentProject.versions.length + 1}（存到 GitHub，每台電腦都看得到）。`;
                 } else {
+                    if (mapping) { try { localStorage.setItem(MAPPING_LOCAL_KEY, JSON.stringify(mapping)); } catch {} }
                     applyUpload(file, elements, types, calc);
                     uploaded = { name: file.name, lines };
                 }
                 rerender();
                 document.getElementById('upload-hint').innerText = `已載入：${file.name}（可再放入其他檔案）`;
+                document.getElementById('upload-remap').classList.remove('hidden');
             } catch (e) {
                 errBox.innerText = '讀取失敗：' + e.message;
                 errBox.classList.remove('hidden');
@@ -1260,15 +1589,18 @@
             '個數': String(l.count), '體積 (M3)': String(l.volume),
         }));
 
-        async function readQuantityFile(file) {
-            const [tables, calc] = await Promise.all([readTables(file), loadCalcConfig()]);
-            const parsed = parseAnyQuantities(tables, calc.grades || {});
+        async function readQuantityFile(file, opts = {}) {
+            const base = await loadCalcConfig();
+            const { table, mapping } = await mapQuantityFile(file, base, opts);
+            const calc = calcWith(base, mapping);
+            const parsed = parseQuantities(table, calc.grades || {});
             const total = r2(Object.values(parsed.elements).reduce((s, e) => s + e.volume, 0));
-            return { ...parsed, calc, saved: { file: file.name, date: today(), total_volume: total, lines: parsed.lines.map(l => ({ ...l, volume: r2(l.volume) })) } };
+            return { ...parsed, calc, mapping, saved: { file: file.name, date: today(), total_volume: total, lines: parsed.lines.map(l => ({ ...l, volume: r2(l.volume) })) } };
         }
 
         // 把自建專案的每個體積檔算成一個版本（V1、V2…），用網站最新單價
         function applyProject(project, calc) {
+            calc = calcWith(calc, project.mapping);
             const { logs, log } = makeLogger();
             data.rebar_official ??= data.rebar;
             let latestTypes = [];
@@ -1422,8 +1754,8 @@
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>讀取中…';
             try {
-                const { saved } = await readQuantityFile(newProjectFile);
-                const project = { id: newId(), name, created_at: today(), updated_at: today(), versions: [saved] };
+                const { saved, mapping } = await readQuantityFile(newProjectFile, { saved: null });
+                const project = { id: newId(), name, created_at: today(), updated_at: today(), versions: [saved], ...(mapping ? { mapping } : {}) };
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>存到 GitHub 中…';
                 await commitProjects(list => {
                     if (list.some(p => p.name === name)) throw new Error(`已經有叫「${name}」的專案，請換個名稱`);
@@ -1515,6 +1847,7 @@
                 if (e.dataTransfer.files[0]) handleUpload(e.dataTransfer.files[0]);
             });
             document.getElementById('upload-download').addEventListener('click', downloadQuantities);
+            document.getElementById('upload-remap').addEventListener('click', () => lastUploadFile && handleUpload(lastUploadFile, { force: true }));
             document.getElementById('upload-github').href = REPO_URL + '/upload/main/data';
         }
 
