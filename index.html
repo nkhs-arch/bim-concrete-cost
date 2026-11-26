@@ -760,6 +760,32 @@
             ).join('');
         }
 
+
+        // 總成本卡片：混凝土＋鋼筋，再加上「計算成果與分區」算出的模板、磚（只有目前模型有）
+        let shownVersion = null, zoneExtra = null;
+        function renderCostKpi() {
+            const i = shownVersion;
+            if (i == null || !data?.versions?.[i]) return;
+            const v = data.versions[i], prev = data.versions[i - 1];
+            const isLatest = i === data.versions.length - 1;
+            const rebar = isLatest ? data.rebar : null;
+            const extra = isLatest && zoneExtra ? zoneExtra : {};
+            const parts = [['混凝土', v.cost_at_current_price]];
+            if (rebar) parts.push(['鋼筋', rebar.cost]);
+            if (extra.formwork) parts.push(['模板', extra.formwork]);
+            if (extra.brick) parts.push(['磚', extra.brick]);
+            document.getElementById('kpi-cost-label').innerText = `動態總估算成本（${parts.map(p => p[0]).join('＋')}）`;
+            document.getElementById('kpi-cost').innerText = nt(parts.reduce((t, p) => t + p[1], 0));
+            const costParts = parts.length > 1
+                ? parts.map(p => `${p[0]} ${nt(p[1])}`).join(' ＋ ')
+                : (data.rebar && !isLatest ? '未含鋼筋、模板（舊模型無類型資料）' : '');
+            // 版本比較只比混凝土，V1 沒有鋼筋，不能拿含鋼筋的總額去比
+            const costDiff = prev
+                ? `混凝土較 ${prev.version} 變動 ${diffSpan(v.cost_at_current_price - prev.cost_at_current_price, nt)}`
+                : '基準版本';
+            document.getElementById('kpi-cost-diff').innerHTML = costParts ? `${costParts}<br>${costDiff}` : costDiff;
+        }
+
         function showVersion(i) {
             const v = data.versions[i];
             const prev = data.versions[i - 1];
@@ -779,20 +805,11 @@
 
             document.getElementById('kpi-volume').innerText = v.total_volume.toLocaleString('en-US', { minimumFractionDigits: 2 });
             // 鋼筋只有目前模型有（舊版本的體積檔沒有類型資料）
-            const rebar = i === data.versions.length - 1 ? data.rebar : null;
-            document.getElementById('kpi-cost-label').innerText = rebar ? '動態總估算成本（混凝土＋鋼筋）' : '動態總估算成本（混凝土）';
-            document.getElementById('kpi-cost').innerText = nt(v.cost_at_current_price + (rebar ? rebar.cost : 0));
-            const costParts = rebar
-                ? `混凝土 ${nt(v.cost_at_current_price)} ＋ 鋼筋 ${nt(rebar.cost)}`
-                : (data.rebar ? '未含鋼筋（舊模型無類型資料）' : '');
+            shownVersion = i;
+            renderCostKpi();
             document.getElementById('kpi-volume-diff').innerHTML = prev
                 ? `${diffSpan(v.total_volume - prev.total_volume, n => n.toFixed(1) + ' m³')} 較 ${prev.version} 增減`
                 : '基準版本';
-            // 版本比較只比混凝土，V1 沒有鋼筋，不能拿含鋼筋的總額去比
-            const costDiff = prev
-                ? `混凝土較 ${prev.version} 變動 ${diffSpan(v.cost_at_current_price - prev.cost_at_current_price, nt)}`
-                : '基準版本';
-            document.getElementById('kpi-cost-diff').innerHTML = costParts ? `${costParts}<br>${costDiff}` : costDiff;
 
             const keys = ORDER.filter(k => v.elements[k]);
             document.getElementById('kpi-elements').innerText = v.element_count;
@@ -2159,7 +2176,7 @@
             const outputs = readOutputs();
             document.body.classList.toggle('hide-out-rebar', !outputs.rebar);
             document.body.classList.toggle('hide-out-carbon', !outputs.carbon);
-            if (!zoneLines || !zoneLines.length || !zoneCalc) { box.classList.add('hidden'); return; }
+            if (!zoneLines || !zoneLines.length || !zoneCalc) { box.classList.add('hidden'); zoneExtra = null; renderCostKpi(); return; }
             box.classList.remove('hidden');
 
             document.getElementById('zone-outputs').innerHTML = OUTPUTS.map(o => o.soon
@@ -2203,6 +2220,8 @@
             const SUM_KEYS = ['volume', 'concrete', 'rebarT', 'rebarCost', 'carbon', 'fwM2', 'fwCost', 'brickM2', 'brickPcs', 'brickCost'];
             const total = rows.reduce((t, r) => { for (const k of SUM_KEYS) t[k] += r[k]; return t; },
                 { label: '合計', ...Object.fromEntries(SUM_KEYS.map(k => [k, 0])) });
+            zoneExtra = { formwork: showFw ? total.fwCost : 0, brick: showBrick ? total.brickCost : 0 };
+            renderCostKpi();
             document.getElementById('zone-foot').innerHTML = rows.length > 1 ? `<tr>${cols.map(c => td(c, total)).join('')}</tr>` : '';
 
             const latest = data.versions[data.versions.length - 1];
