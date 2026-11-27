@@ -862,12 +862,12 @@ const CH = [
 
   { k: '太陽能', cam: [-30, 52, 160, 0, 10, 0], sets: ['pv'], pv: true, html: () => `
     ${eb(8, '能源｜屋頂光電潛力')}
-    <h2>屋頂光電<br>一年約 17.8 萬度電</h2>
-    <p class="lead">G3 量體各層屋頂共 1,801 m²，平均每 m² 每年日照 1,360 kWh。60% 面積（1,080 m²）放光電效率 15% 的太陽能板，其餘留給設備與維修，<em>每年約 178,000 kWh</em>。</p>
+    <h2>頂層屋頂<br>一年約 13 萬度電</h2>
+    <p class="lead">G3 頂層屋頂 1,275 m²，平均每 m² 每年日照 1,400 kWh；下方兩層屋頂做綠化平台。頂層 60% 面積（765 m²）放光電效率 15% 的太陽能板，其餘留給設備與維修，<em>每年約 130,000 kWh</em>。</p>
     <div class="rule"></div>
-    <div class="stats">${stat('1,801', 'm²', '屋頂面積')}${stat('60', '%', '光電覆蓋')}${stat('17.8', '萬 kWh', '年發電量', true)}</div>
+    <div class="stats">${stat('1,275', 'm²', '頂層屋頂')}${stat('60', '%', '光電覆蓋')}${stat('13.0', '萬 kWh', '年發電量', true)}</div>
     <p class="note">資料來源：Autodesk Forma 太陽能分析。</p>
-    <div class="figs one" style="margin-top:18px">${fig('solar', 'Forma 太陽能分析（G3 量體屋頂）')}</div>` },
+    <div class="figs one" style="margin-top:18px">${fig('solar', 'Forma 太陽能分析（G3 頂層屋頂，0–10° 平面）')}</div>` },
 
   { k: '量體比選', cam: [0, 24, 470, -GAP * 1.1, 8, 0], sets: ['cmp'], compare: true, html: () => `
     ${eb(9, '三量體比選｜依分析結果')}
