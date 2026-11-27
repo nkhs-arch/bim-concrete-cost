@@ -2176,6 +2176,7 @@
             return b ? { ratio: e.series[latest] / b, name: e.name, base, latest, from: b, to: e.series[latest] } : { ratio: 1, name: e.name, missingBase: true };
         }
 
+        const FOUNDATION_LEVEL = /筏基|基礎|基腳|foundation|footing/i;
         // 模板面積（m²）：梁、柱用類型尺寸推算，板、牆有面積欄就直接用；都沒有時用經驗值（est）
         function formworkOf(key, l, fw) {
             const v = toNumber(l.volume), area = toNumber(l.area), len = toNumber(l.length);
@@ -2193,6 +2194,11 @@
                 return est();
             }
             if (key === 'floors') {
+                // 筏基、基礎版直接打在土上，底面不用模板，只算四周側模（每塊當正方形：4 × √面積 × 厚度）
+                if (FOUNDATION_LEVEL.test(l.level || '')) {
+                    const n = Math.max(toNumber(l.count), 1), a = area || (d ? v / d[0] : 0);
+                    if (a) return { m2: 4 * Math.sqrt(a / n) * n * (v / a), est: !area };
+                }
                 if (area) return { m2: area, est: false };
                 return d ? { m2: v / d[0], est: false } : est();
             }
@@ -2352,7 +2358,7 @@
             if (group.startsWith('level') && rows.some(r => r.label.startsWith('未分區'))) notes.push('「未分區」是檔案裡沒有樓層／位置資料的構件；Takeoff 匯出時可在計量套件加上「位置」或「樓層」。');
             if (showRebar && missingRatio) notes.push('有類型對不到鋼筋比，該部分鋼筋以 0 計（可按「調整欄位對照」補上）。');
             if (outputs.rebar && !hasRebar) notes.push('這個檔案沒有類型欄，算不了鋼筋。');
-            if (showFw) notes.push(`模板：梁 = 長度 ×（底寬 ＋ 2 × (梁深 − 板厚 ${zoneRates.formwork.slab_thickness_cm} cm)），長度 = 體積 ÷ 斷面；柱 = 周長 × 高度；板 = 底面積；RC 牆 = 兩面面積。${zoneRates.formwork.price_note}。`
+            if (showFw) notes.push(`模板：梁 = 長度 ×（底寬 ＋ 2 × (梁深 − 板厚 ${zoneRates.formwork.slab_thickness_cm} cm)），長度 = 體積 ÷ 斷面；柱 = 周長 × 高度；板 = 底面積（筏基只算四周側模）；RC 牆 = 兩面面積。${zoneRates.formwork.price_note}。`
                 + (fwEst ? `部分構件沒有類型尺寸或面積，以經驗值估算（${Object.entries(zoneRates.formwork.fallback_ratio).map(([k, v]) => `${KEY_LABEL[k]} ${v}`).join('、')} m²/m³）。` : ''));
             if (showBrick) notes.push(`磚牆：1/2B 每 m² ${zoneRates.brick.half.pieces} 塊、砂漿 ${zoneRates.brick.half.mortar_m3} m³；1B 每 m² ${zoneRates.brick.full.pieces} 塊、砂漿 ${zoneRates.brick.full.mortar_m3} m³。${zoneRates.brick.price_note}。`
                 + (brickHalf ? '類型讀不出牆厚的磚牆以 1/2B 計。' : ''));
