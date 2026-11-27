@@ -1063,7 +1063,8 @@
                 '修正': 'bg-rose-950 text-rose-400 border-rose-800',
                 '資料': 'bg-amber-950 text-amber-400 border-amber-800'
             };
-            document.getElementById('changelog-section').classList.remove('hidden');
+            // 更新日誌只給組員（輸入過權杖）看
+            document.getElementById('changelog-section').classList.toggle('hidden', !hasSavedToken());
             document.getElementById('changelog-list').innerHTML = data.changelog.map(entry => `
                 <div class="flex flex-col sm:flex-row gap-1 sm:gap-4">
                     <div class="sm:w-28 shrink-0 text-xs font-mono text-slate-400 pt-0.5">${entry.date}</div>
@@ -1140,6 +1141,8 @@
         }
 
         // 回傳每一頁的原始列（陣列），逐構件明細頁排最前面
+        function hasSavedToken() { try { return !!localStorage.getItem('bim-gh-token'); } catch { return false; } }
+
         async function readSheets(file) {
             if (!window.XLSX) await loadScript(XLSX_URL);
             const buf = await file.arrayBuffer();
@@ -1963,6 +1966,8 @@
 
             document.getElementById('home').classList.add('hidden');
             document.getElementById('dashboard').classList.remove('hidden');
+            // 上傳體積檔只給組員，避免訪客亂丟檔案
+            document.getElementById('upload-section').classList.toggle('hidden', !isMember());
 
             if (isBuiltin) {
                 zoneCalc = await loadCalcConfig();
