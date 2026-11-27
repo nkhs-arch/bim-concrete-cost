@@ -147,7 +147,7 @@ nav button .pg{position:absolute;left:0;top:-1px;height:2px;background:var(--acc
 #loading{position:fixed;inset:0;display:grid;place-items:center;font-size:13px;color:var(--muted);pointer-events:none;transition:opacity .6s}
 
 @media (max-width: 900px), (orientation: portrait) and (max-width: 1100px){
-  #fade{width:100%;top:auto;height:62vh;background:linear-gradient(0deg,rgba(var(--bg-rgb),.98) 0%,rgba(var(--bg-rgb),.94) 70%,rgba(var(--bg-rgb),0) 100%)}
+  #fade{width:100%;top:auto;height:calc(52vh + 170px);background:linear-gradient(0deg,rgba(var(--bg-rgb),.98) 0%,rgba(var(--bg-rgb),.95) 78%,rgba(var(--bg-rgb),0) 100%)}
   header{padding:14px 16px 0}
   .brand b{font-size:13px} .brand span{font-size:11.5px}
   .ctrls button{padding:6px 9px;font-size:12px}
@@ -1055,7 +1055,7 @@ controls.addEventListener('start', () => { rotating = false; camAnim = null; });
 /* ---------- 迴圈 ---------- */
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); labelR.setSize(w, h); camera.aspect = w / h;
   const narrow = w < 900 || h > w; // 桌機：畫面往右移讓出左邊文字區；直式：往上移讓出下方文字
-  camera.setViewOffset(w, h, narrow ? 0 : -w * 0.2, narrow ? h * 0.27 : 0, w, h); camera.updateProjectionMatrix(); }
+  camera.setViewOffset(w, h, narrow ? 0 : -w * 0.2, narrow ? h * 0.3 : 0, w, h); camera.updateProjectionMatrix(); }
 addEventListener('resize', () => { resize(); const c = CH[cur]; if (c) { const [az, el, dist, tx, ty, tz] = c.cam; flyTo(camPose(az, el, dist, tx ?? 0, ty ?? 6, tz ?? 0), 600); } });
 resize();
 const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -1098,6 +1098,11 @@ function loop(now) {
   if (auto && nav.children[cur]) nav.children[cur].querySelector('.pg').style.width = Math.min(100, (now - tStart) / durOf(cur) * 100) + '%';
   [...nav.children].forEach((b, j) => { if (j !== cur || !auto) b.querySelector('.pg').style.width = '0'; });
   renderer.render(scene, camera); labelR.render(scene, camera);
+  // 手機：文字區在下方，跑到文字區後面的 3D 標籤先藏起來，避免疊字
+  if (innerWidth < 900 || innerHeight > innerWidth) {
+    const top = panel.getBoundingClientRect().top - 8;
+    for (const el of document.querySelectorAll('#labels .lbl')) el.style.visibility = el.getBoundingClientRect().bottom > top ? 'hidden' : '';
+  } 
   requestAnimationFrame(loop);
 }
 const start = parseInt(location.hash.slice(1));
