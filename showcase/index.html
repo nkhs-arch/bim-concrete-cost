@@ -546,7 +546,7 @@ function buildSunPath(decl) {
 const DEFAULT_SUN = sunDir(10, 14.5).v;
 
 /* ---------- 風（東北風） ---------- */
-const WN = 520, windPos = new Float32Array(WN * 6), windData = [];
+const WN = 520, windPos = new Float32Array(WN * 18), windData = [];
 const windGeo = new THREE.BufferGeometry(); windGeo.setAttribute('position', new THREE.BufferAttribute(windPos, 3));
 const wind = new THREE.LineSegments(windGeo, new THREE.LineBasicMaterial({ color: 0x3f6fa8, transparent: true, opacity: 0.7 }));
 wind.visible = false; scene.add(wind);
@@ -563,8 +563,12 @@ function stepWind(dt) {
     p.addScaledVector(WD, sp);
     if (hasB) { const x = p.x + OX, y = p.z + OY; if (x > -4 && x < 64 && y > -4 && y < 34 && p.y < H + 3) p.y += sp * 0.9; else if (p.y > 3) p.y -= sp * 0.08; }
     if (p.dot(WD) > 115) resetW(i, false);
-    const t = WD.clone().multiplyScalar(3 + w.v * 4);
-    windPos.set([p.x, p.y, p.z, p.x - t.x, p.y, p.z - t.z], i * 6);
+    const t = WD.clone().multiplyScalar(5 + w.v * 5);
+    // 線段＋箭頭（兩條斜邊）
+    const hx = t.x * 0.35, hz = t.z * 0.35, sx = -t.z * 0.22, sz = t.x * 0.22;
+    windPos.set([p.x, p.y, p.z, p.x - t.x, p.y, p.z - t.z,
+      p.x, p.y, p.z, p.x - hx + sx, p.y, p.z - hz + sz,
+      p.x, p.y, p.z, p.x - hx - sx, p.y, p.z - hz - sz], i * 18);
   }
   windGeo.attributes.position.needsUpdate = true;
 }
@@ -682,7 +686,7 @@ const CH = [
     <div class="figs one">${fig('sun-winter', 'Forma 日照時數｜冬至（無量體）')}</div>
     <p class="note">資料來源：Autodesk Forma 日照分析（2026-10-31）；三維陰影依太陽位置公式即時計算。</p>` },
 
-  { k: '風向', cam: [40, 30, 272, 0, 4, 0], sets: ['nomass'], wind: true, bld: 0, html: () => `
+  { k: '風向', cam: [-35, 30, 240, 0, 4, 0], sets: ['nomass'], wind: true, bld: 0, html: () => `
     ${eb(5, '風環境｜盛行風')}
     <h2>東北風占 39%，<br>是最主要的風</h2>
     <p class="lead">Forma 風環境分析顯示，基地全年以<em>東北風（NE 45°）</em>為主，常見風速約 4 m/s。設計時要讓建築擋住東北風，讓戶外空間在背風面。</p>
