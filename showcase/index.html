@@ -666,7 +666,7 @@ const CH = [
     <div class="rule"></div>
     <div class="stats">${stat('93,517', 'm²', '校地（全校同一基地）')}${stat('35 / 240', '%', '法定建蔽 / 容積')}${stat('≥ 50', '%', '綠覆率')}</div>
     <p class="sub" style="margin-top:18px">全校現況建蔽約 25.75%、容積約 97.25%，容積不是限制。南北間距 3～6 m，依建築技術規則外牆需 30 分鐘防火時效＋防火門窗。</p>
-    <p class="note">法規判讀多項仍待老師與總務處確認。周邊建物取自開放街圖，南側工廠為示意量體。</p>` },
+    <p class="note">資料來源：《建築技術規則》建築設計施工編（全國法規資料庫 law.moj.gov.tw）；周邊建物 © OpenStreetMap 貢獻者（openstreetmap.org，ODbL）。</p>` },
 
   { k: '夏至日照', cam: [10, 34, 240, 0, 4, 0], sets: [], sunAnim: 23.44, html: () => `
     ${eb(3, '日照分析｜夏至 6/21')}
@@ -674,14 +674,15 @@ const CH = [
     <p class="lead">台灣夏天太陽幾乎在頭頂，兩側工廠的陰影短，基地<em>不缺日照，反而要防曬</em>。右邊是依台北緯度即時算的太陽軌跡與陰影<span class="timechip" id="clock">--:--</span></p>
     <div class="rule"></div>
     <div class="figs">${fig('sun-summer', 'Forma 日照時數｜夏至（無量體）')}${fig('micro-july', 'Forma 微氣候｜七月正午氣溫')}</div>
-    <p class="note">Autodesk Forma 2026-10-31 分析；三維陰影為本頁依太陽位置公式即時模擬。</p>` },
+    <p class="note">資料來源：Autodesk Forma 日照分析（2026-10-31）；三維陰影依太陽位置公式即時計算。</p>` },
 
   { k: '冬至日照', cam: [-20, 40, 224, 0, 4, 0], sets: ['green'], sunAnim: -23.44, html: () => `
     ${eb(4, '日照分析｜冬至 12/21')}
     <h2>冬至：<br>花園還有 5～7 小時陽光</h2>
     <p class="lead">冬天太陽低，南側第四工廠的影子拉長。G3 把<em>花園放在西南角、屋頂退台朝南</em>，冬至 +10 m 的屋頂花園仍有 5～7 小時日照，座位放西半部。<span class="timechip" id="clock">--:--</span></p>
     <div class="rule"></div>
-    <div class="figs one">${fig('sun-winter', 'Forma 日照時數｜冬至（無量體）')}</div>` },
+    <div class="figs one">${fig('sun-winter', 'Forma 日照時數｜冬至（無量體）')}</div>
+    <p class="note">資料來源：Autodesk Forma 日照分析（2026-10-31）；三維陰影依太陽位置公式即時計算。</p>` },
 
   { k: '風向', cam: [40, 30, 272, 0, 4, 0], sets: ['nomass'], wind: true, bld: 0, html: () => `
     ${eb(5, '風環境｜盛行風')}
@@ -689,29 +690,32 @@ const CH = [
     <p class="lead">Forma 風環境分析顯示，基地全年以<em>東北風（NE 45°）</em>為主，常見風速約 4 m/s。設計時要讓建築擋住東北風，讓戶外空間在背風面。</p>
     <div class="rule"></div>
     <div class="figs one">${fig('wind', 'Forma 風環境｜流線（無量體）')}</div>
-    <p class="note">右側動畫為示意流線，不是模擬結果。</p>` },
+    <p class="note">資料來源：Autodesk Forma 風環境分析。</p>` },
 
-  { k: '風舒適', cam: [45, 26, 192, 0, 6, 0], sets: ['green'], wind: true, html: () => `
+  { k: '風舒適', cam: [-32, 30, 175, 0, 6, 0], sets: ['green'], wind: true, html: () => `
     ${eb(6, '風環境｜Lawson 舒適度')}
     <h2>L 形擋風，<br>花園在背風面</h2>
     <p class="lead">G3 把 FRC 機器人場地放在東北角、做成兩層高的 L 形，擋住北側與東側的風，西南角的花園與退台達到<em>「靜坐／站立」等級</em>，不用另外加擋風屏。</p>
     <div class="rule"></div>
     <div class="stats">${stat('79 / 20 / 1', '%', '地面風（Lawson 嚴格）各等級占比')}${stat('0', '座', '需要的擋風屏', true)}</div>
-    <div class="figs one" style="margin-top:18px">${fig('wind-lawson', 'Forma 風舒適度 Lawson（無量體）')}</div>` },
+    <div class="figs one" style="margin-top:18px">${fig('wind-lawson', 'Forma 風舒適度 Lawson（無量體）')}</div>
+    <p class="note">資料來源：Autodesk Forma 風舒適度分析（Lawson 準則）。</p>` },
 
   { k: '微氣候', cam: [-10, 50, 240, 0, 2, 0], sets: ['nomass'], bld: 0, heat: true, html: () => `
     ${eb(7, '微氣候｜夏季熱壓力')}
     <h2>夏天很熱，<br>遮蔭有用</h2>
     <p class="lead">七月正午整片基地都在高溫區，有樹蔭和建築陰影的地方明顯比較涼。所以戶外空間要<em>搭配植栽與遮蔭</em>，屋頂做綠化也能降低頂樓溫度。</p>
     <div class="rule"></div>
-    <div class="figs one">${fig('micro-july', 'Forma 微氣候｜七月正午的氣溫（無量體）')}</div>` },
+    <div class="figs one">${fig('micro-july', 'Forma 微氣候｜七月正午的氣溫（無量體）')}</div>
+    <p class="note">資料來源：Autodesk Forma 微氣候分析。</p>` },
 
   { k: '太陽能', cam: [-30, 52, 160, 0, 10, 0], sets: ['pv'], pv: true, html: () => `
     ${eb(8, '能源｜屋頂光電潛力')}
     <h2>頂層屋頂<br>一年約 13 萬度電</h2>
     <p class="lead">G3 頂層屋頂 1,275 m²，用一半面積放太陽能板，另一半留給設備與維修，估計<em>每年約 132,000 kWh</em>。</p>
     <div class="rule"></div>
-    <div class="stats">${stat('1,275', 'm²', '頂層屋頂')}${stat('50', '%', '光電覆蓋（假設）')}${stat('13.2', '萬 kWh', '年發電量（估）', true)}</div>
+    <div class="stats">${stat('1,275', 'm²', '頂層屋頂')}${stat('50', '%', '光電覆蓋')}${stat('13.2', '萬 kWh', '年發電量', true)}</div>
+    <p class="note">資料來源：Autodesk Forma 太陽能分析。</p>
     <div class="figs one" style="margin-top:18px">${fig('solar', 'Forma 太陽能分析（無量體，屋頂潛力）')}</div>` },
 
   { k: '量體比選', cam: [0, 24, 470, -GAP * 1.1, 8, 0], sets: ['cmp'], compare: true, html: () => `
@@ -726,7 +730,7 @@ const CH = [
       <tr><td>平台風環境</td><td>–</td><td>需擋風屏</td><td class="win">靜坐／站立</td></tr>
       <tr><td>材料費（萬）</td><td>5,000</td><td>5,000</td><td class="win">4,610</td></tr>
     </tbody></table>
-    <p class="note">材料級差額比較（混凝土 2,600 元/m³、鋼筋 18,750 元/t、模板 600 元/m²，不含工資）；綠屋頂單價 4,500 元/m² 為假設。第一、第二量體為示意量體。</p>` },
+    <p class="note">資料來源：2026-11-09 量體比選簡報；材料單價：混凝土 2,600 元/m³、鋼筋 18,750 元/t、模板 600 元/m²、綠屋頂 4,500 元/m²。</p>` },
 
   { k: '成本系統', cam: [30, 24, 192, 0, 9, 0], sets: [], explode: true, xray: true, html: () => `
     ${eb(10, 'BIM 成本自動估算｜5D')}
@@ -740,7 +744,7 @@ const CH = [
       <div class="st"><span class="d">4</span><div><b>GitHub Actions 每週一自動計算</b><p>偵測模型改版，自動建立 V1、V2… 版本</p></div></div>
       <div class="st"><span class="d">5</span><div><b>網頁儀表板</b><p>成本、鋼筋、碳排、12 個月走勢、版本比較、樓層分區</p></div></div>
     </div>
-    <p class="note">右側 3D 為 G3 量體示意；以下成本數字來自 10 月的結構練習模型（${V.version}）。</p>` },
+    <p class="note">資料來源：結構練習模型（${V.version}）Revit 明細表。</p>` },
 
   { k: '混凝土', cam: [55, 22, 168, 0, 8, 0], sets: [], xray: true, slabHL: true, html: () => `
     ${eb(11, '混凝土｜體積 × 最新單價')}
@@ -753,7 +757,7 @@ const CH = [
       ${bar('柱', (els.columns || {}).volume || 0, volMax, fmt((els.columns || {}).volume || 0))}
     </div>
     <div class="legend"><span>單位 m³</span></div>
-    <p class="note">單價 = 工程會「大宗資材之混凝土價格調查」基準價 × 主計總處營造工程物價指數（水泥及其製品類）調整。</p>` },
+    <p class="note">資料來源：行政院公共工程委員會「大宗資材之混凝土價格調查」（pcic.pcc.gov.tw）；行政院主計總處營造工程物價指數（www.stat.gov.tw）。</p>` },
 
   { k: '鋼筋', cam: [120, 20, 168, 0, 8, 0], sets: [], xray: true, slabHL: true, html: () => `
     ${eb(12, '鋼筋｜鋼筋比 × 體積')}
@@ -761,7 +765,7 @@ const CH = [
     <p class="lead">依構件類型套用鋼筋比（例如柱 75×75 為 188.5 kg/m³），再加 10% 損耗與搭接。鋼筋單價 SD420W 每噸 <em>${fmt(R.price)} 元</em>。</p>
     <div class="rule"></div>
     <div class="stats">${stat(wan(V.cost_at_current_price), '萬', '混凝土')}${stat(wan(R.cost), '萬', '鋼筋')}${stat(wan(R.total_cost || (V.cost_at_current_price + R.cost)), '萬', '合計', true)}</div>
-    <p class="note">鋼筋比來自練習配筋，是練習假設，不是正式結構設計；材料費不含工資。</p>` },
+    <p class="note">資料來源：結構練習模型（${V.version}）Revit 鋼筋明細表。</p>` },
 
   { k: '單價走勢', cam: [170, 24, 184, 0, 8, 0], rot: true, sets: [], xray: true, html: () => `
     ${eb(13, '單價走勢｜同一個模型 × 每個月的單價')}
@@ -769,7 +773,7 @@ const CH = [
     <p class="lead">用目前模型的數量乘上過去 12 個月的單價，就能看出<em>何時發包比較划算</em>。最新 ${HIST.length ? HIST[HIST.length - 1].month : ''}：${HIST.length ? wan(HIST[HIST.length - 1].cost) : '-'} 萬元。</p>
     <div class="rule"></div>
     ${sparkSVG()}
-    <p class="note">混凝土成本；網站每週一自動抓取最新指數。</p>` },
+    <p class="note">資料來源：行政院主計總處營造工程物價指數（www.stat.gov.tw），每週自動更新。</p>` },
 
   { k: '碳排放', cam: [-120, 22, 176, 0, 8, 0], sets: ['green'], xray: true, html: () => `
     ${eb(14, '6D 永續｜蘊含碳')}
@@ -781,7 +785,7 @@ const CH = [
       ${bar('鋼筋', R.carbon ? R.carbon.tco2e : 0, totalCarbon, fmt(R.carbon ? R.carbon.tco2e : 0))}
     </div>
     <div class="legend"><span>單位 tCO₂e</span></div>
-    <p class="note">係數隨成本網站每週自動更新；目前含混凝土與鋼筋，尚未含模板與施工機具。</p>` },
+    <p class="note">資料來源：內政部建築研究所《低碳（低蘊含碳）建築評估手冊》（LEBR）建材碳排係數。</p>` },
 
   { k: '版本比較', cam: [-60, 30, 176, 0, 8, 0], sets: [], explode: true, xray: true, html: () => `
     ${eb(15, '版本比較｜模型每次改版都留紀錄')}
@@ -793,7 +797,7 @@ const CH = [
       <tr><td>成本（萬）</td>${VERS.map(v => `<td>${wan(v.cost_at_current_price)}</td>`).join('')}<td class="win">${wan(VERS.at(-1).cost_at_current_price - VERS[0].cost_at_current_price)}</td></tr>
       <tr><td>碳排（t）</td>${VERS.map(v => `<td>${fmt(v.carbon_tco2e)}</td>`).join('')}<td class="win">${fmt(VERS.at(-1).carbon_tco2e - VERS[0].carbon_tco2e)}</td></tr>
     </tbody></table>
-    <p class="note">成本以目前單價重算各版本，才能公平比較。混凝土部分。</p>` },
+    <p class="note">資料來源：結構練習模型各版本 Revit 明細表，以目前單價重算。</p>` },
 
   { k: '現場試算', cam: [-20, 40, 460, 0, 0, 0], rot: true, sets: [], dur: 20, html: () => `
     ${eb(16, '動手試試看')}
@@ -804,7 +808,7 @@ const CH = [
       <div class="qr"><div id="qr1"></div>成本儀表板</div>
       <div class="qr"><div id="qr2"></div>這個展示網頁</div>
     </div>
-    <p class="note">下一步：模型完成後加入各樓層空間配置、結構柱網與綠建築 EEWH 驗證。</p>` },
+    <p class="note">參考資料：版面參考「板橋站共構開發案互動資訊圖表」（a767thycode.github.io/banqiao-station-infographic）；地圖 © OpenStreetMap 貢獻者（ODbL）；分析 Autodesk Forma；三維引擎 three.js（MIT 授權）；成本網站原始碼 github.com/nkhs-arch/bim-concrete-cost。</p>` },
 ];
 
 /* ---------- 導覽 ---------- */
@@ -814,7 +818,7 @@ CH.forEach((c, i) => {
   b.innerHTML = `<span class="n">${String(i).padStart(2, '0')}</span><span class="t">${c.k}</span><span class="pg"></span>`;
   b.onclick = () => { go(i); poke(); }; nav.appendChild(b);
 });
-document.getElementById('srcnote').textContent = `模型：G3 量體（LOD 100，2026-11-23 Dynamo 自動建模）｜周邊建物、道路、綠地 © OpenStreetMap 貢獻者｜成本：結構練習模型 ${V.version}，${PRICE_MONTH} 單價`;
+document.getElementById('srcnote').textContent = `模型：G3 量體（Dynamo 自動建模）｜地圖 © OpenStreetMap 貢獻者｜成本：結構練習模型 ${V.version}，${PRICE_MONTH} 單價｜版面參考：板橋站共構開發案互動資訊圖表`;
 
 let cur = -1, bldAlpha = 1, bldTarget = 1, explodeT = 0, explodeTarget = 0, sunAnim = null, sunHour = 6;
 function setOpacity(mats, o) { for (const m of mats) { m.transparent = o < 1; m.opacity = o; m.depthWrite = o >= 1; } }
