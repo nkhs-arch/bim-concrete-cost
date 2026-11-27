@@ -597,10 +597,8 @@ function camPose(az, el, dist, tx = 0, ty = 6, tz = 0) {
   const a = az * Math.PI / 180, e = el * Math.PI / 180;
   const narrow = innerWidth < 900 || innerHeight > innerWidth;
   const d = dist * (narrow ? 1.45 : 1);
-  const t = new THREE.Vector3(tx, ty, tz);
-  // 桌機：模型往右偏，讓出左邊文字區
-  const shift = narrow ? new THREE.Vector3(0, d * 0.16, 0) : new THREE.Vector3(-Math.cos(a), 0, Math.sin(a)).multiplyScalar(-d * 0.16);
-  const tt = t.clone().sub(shift);
+  // 旋轉中心固定在建築上；讓出文字區改用 setViewOffset 平移畫面（見 resize）
+  const tt = new THREE.Vector3(tx, ty, tz);
   return { pos: new THREE.Vector3(tt.x + d * Math.sin(a) * Math.cos(e), tt.y + d * Math.sin(e), tt.z + d * Math.cos(a) * Math.cos(e)), tgt: tt };
 }
 let camAnim = null;
@@ -905,7 +903,9 @@ panel.addEventListener('touchend', e => { if (sx === null) return; const dx = e.
 controls.addEventListener('start', () => { rotating = false; camAnim = null; });
 
 /* ---------- 迴圈 ---------- */
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); labelR.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); labelR.setSize(w, h); camera.aspect = w / h;
+  const narrow = w < 900 || h > w; // 桌機：畫面往右移讓出左邊文字區；直式：往上移讓出下方文字
+  camera.setViewOffset(w, h, narrow ? 0 : -w * 0.17, narrow ? h * 0.27 : 0, w, h); camera.updateProjectionMatrix(); }
 addEventListener('resize', () => { resize(); const c = CH[cur]; if (c) { const [az, el, dist, tx, ty, tz] = c.cam; flyTo(camPose(az, el, dist, tx ?? 0, ty ?? 6, tz ?? 0), 600); } });
 resize();
 const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
