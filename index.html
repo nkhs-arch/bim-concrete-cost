@@ -757,7 +757,37 @@
             const box = document.getElementById('version-buttons');
             box.innerHTML = data.versions.map((v, i) =>
                 `<button onclick="showVersion(${i})" id="btn-v${i}" class="text-xs px-2.5 py-1 rounded font-mono transition">${v.version}</button>`
-            ).join('');
+            ).join('')
+                // 自建專案可以刪掉目前選的版本（至少留一版）
+                + (currentProject && currentProject.versions.length > 1
+                    ? `<button onclick="deleteVersion(shownVersion)" id="btn-del-version" class="text-xs px-2 py-1 rounded text-slate-500 hover:text-rose-400 transition border-l border-dark-border ml-1" title="刪除目前選的版本"><i class="fa-solid fa-trash-can"></i></button>`
+                    : '');
+        }
+
+        async function deleteVersion(i) {
+            if (!currentProject || i == null) return;
+            const pid = currentProject.id, pv = currentProject.versions[i];
+            if (!pv || currentProject.versions.length < 2) return;
+            const label = 'V' + (i + 1);
+            if (!confirm(`確定要刪除「${currentProject.name}」的 ${label}（${pv.file}）嗎？後面的版本會往前補號，每台電腦都會看到（GitHub 的歷史紀錄裡還找得回來）。`)) return;
+            try {
+                await commitProjects(list => {
+                    const p = list.find(x => x.id === pid);
+                    if (!p) throw new Error('這個專案已經被刪除了');
+                    // 用檔名＋日期＋總體積確認是同一版，避免別台電腦剛好改過造成刪錯
+                    const k = p.versions.findIndex((x, j) => j === i && x.file === pv.file && x.date === pv.date && x.total_volume === pv.total_volume);
+                    if (k < 0) throw new Error('版本已經變動，請重新整理後再試');
+                    if (p.versions.length < 2) throw new Error('至少要留一個版本');
+                    p.versions.splice(k, 1);
+                    p.updated_at = today();
+                    return list;
+                }, `專案「${currentProject.name}」刪除 ${label}：${pv.file}`);
+            } catch (e) { return alert('刪除失敗：' + e.message); }
+            currentProject = findProject(pid);
+            applyProject(currentProject, await loadCalcConfig());
+            rerender();
+            document.getElementById('upload-desc').innerText =
+                `放入這個專案新版本的體積檔，會存成 V${currentProject.versions.length + 1}（存到 GitHub，每台電腦都看得到）。`;
         }
 
 
