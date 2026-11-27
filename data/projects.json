@@ -1,5 +1,8 @@
 {
  "format": "bim-concrete-cost-projects",
+ "settings": {
+  "builtin_visibility": "private"
+ },
  "projects": [
   {
    "id": "pmwyoqd8nagpf",
