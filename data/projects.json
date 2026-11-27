@@ -2,6 +2,80 @@
  "format": "bim-concrete-cost-projects",
  "projects": [
   {
+   "id": "pmwyoqd8nagpf",
+   "name": "選手大樓-新版",
+   "created_at": "2026-11-27",
+   "updated_at": "2026-11-27",
+   "versions": [
+    {
+     "file": "專題 G3 建築空間分配-檢查 Takeoff Inventory - 2026-11-27-202611270751.xlsx",
+     "date": "2026-11-27",
+     "total_volume": 11504.35,
+     "lines": [
+      {
+       "category": "牆",
+       "level": "",
+       "type": "",
+       "spec": "",
+       "count": 159,
+       "volume": 1567.34,
+       "area": 0,
+       "length": 0
+      },
+      {
+       "category": "樓板",
+       "level": "",
+       "type": "",
+       "spec": "",
+       "count": 838,
+       "volume": 5486.61,
+       "area": 0,
+       "length": 0
+      },
+      {
+       "category": "結構柱",
+       "level": "",
+       "type": "",
+       "spec": "",
+       "count": 890,
+       "volume": 1317.98,
+       "area": 0,
+       "length": 0
+      },
+      {
+       "category": "結構樑",
+       "level": "",
+       "type": "",
+       "spec": "",
+       "count": 1566,
+       "volume": 3132.42,
+       "area": 0,
+       "length": 0
+      }
+     ]
+    }
+   ],
+   "mapping": {
+    "sheet": 0,
+    "header": 0,
+    "columns": {
+     "category": "算量类型",
+     "volume": "Volume (M3)",
+     "type": "",
+     "count": "",
+     "level": "位置",
+     "spec": "",
+     "item": "行项目名称",
+     "area": "",
+     "length": ""
+    },
+    "fixed": "",
+    "categories": {},
+    "types": {},
+    "ratios": {}
+   }
+  },
+  {
    "id": "pmwxf6ex4sla7",
    "name": "盛均",
    "created_at": "2026-11-26",
