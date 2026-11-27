@@ -41,6 +41,7 @@ button{font:inherit;color:inherit}
 .lbl.flow.calm{border-color:var(--green);color:var(--green)}
 .lbl.route{border-color:var(--blue);color:var(--blue);font-weight:600;text-align:center}
 .lbl.route small{color:var(--ink-2);font-weight:400}
+.lbl.route.green{border-color:var(--green);color:var(--green)}
 .lbl.route.warm{border-color:var(--accent);color:var(--accent)}
 .lbl.dim{background:transparent;border:none;font-family:var(--mono);font-size:12px;color:var(--ink-2);backdrop-filter:none;text-shadow:0 0 4px rgba(var(--bg-rgb),.9)}
 
@@ -518,7 +519,8 @@ label('屋頂光電', 40, 6, H + 2, '', ['pv']);
 // 動線（基地章）：校門 → 大樓、大樓 → 宿舍（資料座標，沿校內通路示意）
 const ROUTES = [
   { name: 'gate', color: 0x3f6fa8, pts: [[-9.4, 130.3], [-6, 120], [-6, 15], [-0.5, 15]] },
-  { name: 'dorm', color: 0xd9902b, pts: [[-0.5, 22], [-6, 22], [-6, 116], [150, 116], [150, 215], [168.5, 215]] },
+  { name: 'dorm', color: 0xd9902b, pts: [[60.5, 15], [63.5, 15], [63.5, 116], [150, 116], [150, 215], [168.5, 215]] },
+  { name: 'station', color: 0x6f9a4c, pts: [[-93.3, 431.4], [-32.9, 436.0], [-30.1, 393.6], [-27.8, 333.8], [-25.1, 209.7], [-24.5, 129.1], [-9.4, 130.3]] },
 ];
 const routeGrp = new THREE.Group(); world.add(routeGrp); routeGrp.visible = false;
 const walkers = [];
@@ -534,8 +536,9 @@ for (const r of ROUTES) {
 }
 const walkMin = L => Math.max(1, Math.round(L / 1.3 / 60));
 label(`校門（興中路）<br><small>到大樓約 ${Math.round(routeLen.gate / 10) * 10} m・步行 ${walkMin(routeLen.gate)} 分</small>`, -9.4, 130.3, 4, 'route', ['route']);
+label(`捷運・台鐵・高鐵 南港站<br><small>到校門約 ${Math.round(routeLen.station / 10) * 10} m・步行 ${walkMin(routeLen.station)} 分</small>`, -93.3, 431.4, 4, 'route green', ['route']);
 label(`宿舍<br><small>從大樓約 ${Math.round(routeLen.dorm / 10) * 10} m・步行 ${walkMin(routeLen.dorm)} 分</small>`, 210, 230, 21, 'route warm', ['route']);
-function stepWalkers(dt) { for (const k of walkers) { k.u = (k.u + dt * 6 / k.L) % 1; k.w.position.copy(k.path.getPointAt(k.u)); k.w.position.y = 1.2; } }
+function stepWalkers(dt) { for (const k of walkers) { k.u = (k.u + dt * 6 / k.L) % 1; const q = k.path.getPointAt(Math.min(k.u, 0.999)); if (q) k.w.position.copy(q); k.w.position.y = 1.2; } }
 // 量體範圍虛線
 const outline = (() => {
   const pts = [[0, 0], [60, 0], [60, 30], [0, 30], [0, 0]].map(([x, y]) => { const [X, Z] = P(x, y); return new THREE.Vector3(X, 0.15, Z); });
@@ -706,7 +709,7 @@ const els = V.elements || {};
 const volMax = Math.max(...['floors', 'columns', 'beams'].map(k => (els[k] || {}).volume || 0));
 
 const CH = [
-  { k: '封面', cam: [-38, 34, 560, 0, 0, 0], rot: true, sets: [], html: () => `
+  { k: '封面', cam: [-38, 34, 560, 0, 0, 0], rot: true, sets: ['route'], routes: true, html: () => `
     ${eb(0, '台北市南港區｜校內希望花園')}
     <h1>技能選手<br>訓練大樓</h1>
     <p class="lead">${TITLE_SUB}</p>
@@ -736,7 +739,7 @@ const CH = [
     <p class="lead">建築外框 60 × 30 m，北側離第七工廠約 4.64 m、南側離第四工廠約 5.75 m，東側約 7.24 m。<em>只有西側校內通路</em>能卸貨與吊裝。</p>
     <div class="rule"></div>
     <div class="stats">${stat('93,517', 'm²', '校地（全校同一基地）')}${stat('35 / 240', '%', '法定建蔽 / 容積')}${stat('≥ 50', '%', '綠覆率')}</div>
-    <div class="legend" style="margin-top:16px"><span><i style="background:var(--blue)"></i>校門 → 大樓 ${Math.round(routeLen.gate / 10) * 10} m</span><span><i style="background:var(--accent)"></i>大樓 → 宿舍 ${Math.round(routeLen.dorm / 10) * 10} m</span></div>
+    <div class="legend" style="margin-top:16px"><span><i style="background:var(--green)"></i>南港站 → 校門 ${Math.round(routeLen.station / 10) * 10} m</span><span><i style="background:var(--blue)"></i>校門 → 大樓 ${Math.round(routeLen.gate / 10) * 10} m</span><span><i style="background:var(--accent)"></i>大樓 → 宿舍 ${Math.round(routeLen.dorm / 10) * 10} m</span></div>
     <p class="sub" style="margin-top:18px">全校現況建蔽約 25.75%、容積約 97.25%，容積不是限制。南北間距 3～6 m，依建築技術規則外牆需 30 分鐘防火時效＋防火門窗。</p>
     <p class="note">資料來源：《建築技術規則》建築設計施工編（全國法規資料庫 law.moj.gov.tw）；周邊建物 © OpenStreetMap 貢獻者（openstreetmap.org，ODbL）。</p>` },
 
