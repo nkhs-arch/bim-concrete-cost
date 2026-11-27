@@ -111,12 +111,12 @@
             </form>
 
             <!-- 已經有的專案 -->
-            <div class="md:col-span-3 bg-dark-card border border-dark-border rounded-xl p-5 space-y-4">
+            <div id="project-panel" class="md:col-span-3 bg-dark-card border border-dark-border rounded-xl p-5 space-y-4">
                 <div class="flex items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold text-white flex items-center">
                         <i class="fa-solid fa-folder-tree mr-2 text-cyan-400"></i>已經有的專案
                     </h3>
-                    <div class="flex gap-2 text-[11px]">
+                    <div id="project-tools" class="flex gap-2 text-[11px]">
                         <button id="projects-export" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg transition" title="把你建立的專案存成檔案，帶到別台電腦"><i class="fa-solid fa-file-export mr-1"></i>匯出</button>
                         <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg transition" title="讀入別台電腦匯出的專案檔"><i class="fa-solid fa-file-import mr-1"></i>匯入<input id="projects-import" type="file" accept=".json" class="hidden"></label>
                     </div>
@@ -127,7 +127,9 @@
                     <span>這台電腦的瀏覽器裡還有 <strong id="legacy-count">0</strong> 個舊專案，只有這台看得到。</span>
                     <button id="legacy-upload" class="shrink-0 bg-amber-700 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg transition"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>上傳共用</button>
                 </div>
-                <p class="text-[11px] text-slate-500">* 專案存在 GitHub repo 的 data/projects.json，每台電腦、每個組員打開都看得到。建立、新增版本或刪除時需要 GitHub 權杖（每台電腦第一次輸入一次）。「選手大樓」是網站的正式資料。
+                <p class="text-[11px] text-slate-500"><span id="member-note">* 專案存在 GitHub repo 的 data/projects.json。建立、新增版本或刪除時需要 GitHub 權杖（每台電腦第一次輸入一次）。「選手大樓」是網站的正式資料。專案右邊的 <i class="fa-solid fa-earth-asia"></i>／<i class="fa-solid fa-lock"></i> 可切換公開或私人：私人專案只有輸入過權杖的組員看得到。</span>
+                    <span id="visitor-note" class="hidden">* 目前顯示公開的專案。</span>
+                    <button id="member-login" class="hidden underline hover:text-slate-300">組員登入</button>
                     <button id="token-forget" class="hidden underline hover:text-slate-300">清除這台電腦存的權杖</button></p>
             </div>
         </div>
@@ -759,7 +761,7 @@
                 `<button onclick="showVersion(${i})" id="btn-v${i}" class="text-xs px-2.5 py-1 rounded font-mono transition">${v.version}</button>`
             ).join('')
                 // 自建專案可以刪掉目前選的版本（至少留一版）
-                + (currentProject && currentProject.versions.length > 1
+                + (currentProject && isMember() && currentProject.versions.length > 1
                     ? `<button onclick="deleteVersion(shownVersion)" id="btn-del-version" class="text-xs px-2 py-1 rounded text-slate-500 hover:text-rose-400 transition border-l border-dark-border ml-1" title="刪除目前選的版本"><i class="fa-solid fa-trash-can"></i></button>`
                     : '');
         }
@@ -1798,6 +1800,10 @@
         }
 
         const findProject = id => projects.find(p => p.id === id);
+        // 公開／私人：沒有權杖的訪客（例如展場掃 QR code）只看得到公開專案；有權杖的組員全部看得到
+        const isMember = () => !!getToken();
+        const isPublic = p => p?.visibility === 'public';
+        const canSee = p => !!p && (isMember() || isPublic(p));
 
         // 改共用專案：每次都拿 GitHub 上最新的清單來改，別人同時改也不會互相蓋掉
         async function commitProjects(mutate, message) {
@@ -1935,7 +1941,7 @@
         async function openProject(id) {
             const isBuiltin = id === BUILTIN.id;
             currentProject = isBuiltin ? null : findProject(id);
-            if (!isBuiltin && !currentProject) return showHome();
+            if (!isBuiltin && !canSee(currentProject)) { currentProject = null; return showHome(); }
             if (location.hash.slice(1) !== 'project=' + id) history.replaceState(null, '', '#project=' + id);
 
             const name = isBuiltin ? BUILTIN.name : currentProject.name;
@@ -1980,7 +1986,7 @@
             renderProjectList();
         }
 
-        function projectCard({ id, name, tag, detail, deletable }) {
+        function projectCard({ id, name, tag, detail, deletable, visibility }) {
             return `<div class="group flex items-center gap-3 bg-dark-bg border border-dark-border hover:border-cyan-600 rounded-lg p-3 transition">
                 <button onclick="openProject('${id}')" class="flex-1 min-w-0 flex items-center gap-3 text-left">
                     <span class="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${deletable ? 'bg-emerald-950 text-emerald-400' : 'bg-cyan-950 text-cyan-400'}">
@@ -1994,6 +2000,7 @@
                         <span class="block text-[11px] text-slate-400 truncate">${detail}</span>
                     </span>
                 </button>
+                ${visibility ? `<button onclick="toggleVisibility('${id}')" class="shrink-0 px-2 py-1 text-[11px] rounded border transition ${visibility === 'public' ? 'text-emerald-400 border-emerald-800 hover:bg-emerald-950' : 'text-slate-400 border-slate-700 hover:bg-slate-800'}" title="${visibility === 'public' ? '公開：任何人都看得到，點一下改成私人' : '私人：只有組員看得到，點一下改成公開'}"><i class="fa-solid ${visibility === 'public' ? 'fa-earth-asia' : 'fa-lock'} mr-1"></i>${visibility === 'public' ? '公開' : '私人'}</button>` : ''}
                 ${deletable ? `<button onclick="deleteProject('${id}')" class="shrink-0 text-slate-500 hover:text-rose-400 px-2 py-1 transition" title="刪除專案"><i class="fa-solid fa-trash-can"></i></button>` : ''}
                 <i class="fa-solid fa-chevron-right text-slate-600 group-hover:text-cyan-400 text-xs"></i>
             </div>`;
@@ -2005,10 +2012,11 @@
                 id: BUILTIN.id, name: BUILTIN.name, tag: '網站正式資料',
                 detail: `${data.versions.length} 個版本 · 最新 ${official.version} ${official.total_volume.toLocaleString('en-US')} m³ · 更新 ${esc(data.generated_at)}`,
             })];
-            for (const p of projects) {
+            const member = isMember();
+            for (const p of projects.filter(canSee)) {
                 const last = p.versions[p.versions.length - 1];
                 cards.push(projectCard({
-                    id: p.id, name: p.name, tag: '共用專案', deletable: true,
+                    id: p.id, name: p.name, tag: '共用專案', deletable: member, visibility: member ? (isPublic(p) ? 'public' : 'private') : null,
                     detail: last
                         ? `${p.versions.length} 個版本 · 最新 ${esc(last.file)}${last.total_volume != null ? ` ${last.total_volume.toLocaleString('en-US')} m³` : ''} · ${esc(last.date)}`
                         : '還沒有體積檔',
@@ -2021,7 +2029,29 @@
             const legacy = legacyProjects().filter(p => !findProject(p.id));
             document.getElementById('legacy-box').classList.toggle('hidden', !legacy.length);
             document.getElementById('legacy-count').innerText = legacy.length;
-            document.getElementById('token-forget').classList.toggle('hidden', !getToken());
+            document.getElementById('token-forget').classList.toggle('hidden', !member);
+            document.getElementById('member-login').classList.toggle('hidden', member);
+            document.getElementById('member-note').classList.toggle('hidden', !member);
+            document.getElementById('visitor-note').classList.toggle('hidden', member);
+            document.getElementById('new-project-form').classList.toggle('hidden', !member);
+            document.getElementById('project-tools').classList.toggle('hidden', !member);
+            document.getElementById('project-panel').classList.toggle('md:col-span-5', !member);
+            document.getElementById('project-panel').classList.toggle('md:col-span-3', member);
+        }
+
+        async function toggleVisibility(id) {
+            const p = findProject(id);
+            if (!p) return;
+            const next = isPublic(p) ? 'private' : 'public';
+            try {
+                await commitProjects(list => {
+                    const x = list.find(q => q.id === id);
+                    if (!x) throw new Error('這個專案已經被刪除了');
+                    x.visibility = next;
+                    return list;
+                }, `專案「${p.name}」改為${next === 'public' ? '公開' : '私人'}`);
+            } catch (e) { alert('切換失敗：' + e.message); }
+            renderProjectList();
         }
 
         async function deleteProject(id) {
@@ -2122,6 +2152,10 @@
             document.getElementById('projects-export').addEventListener('click', exportProjects);
             document.getElementById('legacy-upload').addEventListener('click', migrateLegacy);
             document.getElementById('token-forget').addEventListener('click', () => { setToken(''); renderProjectList(); });
+            document.getElementById('member-login').addEventListener('click', async () => {
+                try { await requireToken(); await refreshProjects(); } catch {}
+                renderProjectList();
+            });
             document.getElementById('token-input').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('token-save').click(); });
             const imp = document.getElementById('projects-import');
             imp.addEventListener('change', () => { if (imp.files[0]) importProjects(imp.files[0]); imp.value = ''; });
