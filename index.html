@@ -130,6 +130,7 @@
                 <p class="text-[11px] text-slate-500"><span id="member-note">* 專案存在 GitHub repo 的 data/projects.json。建立、新增版本或刪除時需要 GitHub 權杖（每台電腦第一次輸入一次）。「選手大樓」是網站的正式資料。專案右邊的 <i class="fa-solid fa-earth-asia"></i>／<i class="fa-solid fa-lock"></i> 可切換公開或私人：私人專案只有輸入過權杖的組員看得到。</span>
                     <span id="visitor-note" class="hidden">* 目前顯示公開的專案。</span>
                     <button id="member-login" class="hidden underline hover:text-slate-300">組員登入</button>
+                    <button id="builtin-restore" onclick="restoreBuiltin()" class="hidden underline hover:text-slate-300">還原「選手大樓」</button>
                     <button id="token-forget" class="hidden underline hover:text-slate-300">清除這台電腦存的權杖</button></p>
             </div>
         </div>
@@ -1807,6 +1808,7 @@
         const isPublic = p => p?.visibility === 'public';
         const canSee = p => !!p && (isMember() || isPublic(p));
         const builtinPublic = () => projectSettings.builtin_visibility !== 'private';
+        const builtinHidden = () => projectSettings.builtin_hidden === true;
 
         // 改共用專案：每次都拿 GitHub 上最新的清單來改，別人同時改也不會互相蓋掉
         async function commitProjects(mutate, message, mutateSettings = x => x) {
@@ -1944,7 +1946,7 @@
 
         async function openProject(id) {
             const isBuiltin = id === BUILTIN.id;
-            if (isBuiltin && !isMember() && !builtinPublic()) return showHome();
+            if (isBuiltin && (builtinHidden() || (!isMember() && !builtinPublic()))) return showHome();
             currentProject = isBuiltin ? null : findProject(id);
             if (!isBuiltin && !canSee(currentProject)) { currentProject = null; return showHome(); }
             if (location.hash.slice(1) !== 'project=' + id) history.replaceState(null, '', '#project=' + id);
@@ -1994,13 +1996,13 @@
         function projectCard({ id, name, tag, detail, deletable, visibility }) {
             return `<div class="group flex items-center gap-3 bg-dark-bg border border-dark-border hover:border-cyan-600 rounded-lg p-3 transition">
                 <button onclick="openProject('${id}')" class="flex-1 min-w-0 flex items-center gap-3 text-left">
-                    <span class="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${deletable ? 'bg-emerald-950 text-emerald-400' : 'bg-cyan-950 text-cyan-400'}">
-                        <i class="fa-solid ${deletable ? 'fa-folder' : 'fa-building'}"></i>
+                    <span class="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${id !== BUILTIN.id ? 'bg-emerald-950 text-emerald-400' : 'bg-cyan-950 text-cyan-400'}">
+                        <i class="fa-solid ${id !== BUILTIN.id ? 'fa-folder' : 'fa-building'}"></i>
                     </span>
                     <span class="min-w-0">
                         <span class="flex items-center gap-2">
                             <span class="font-semibold text-white truncate">${esc(name)}</span>
-                            <span class="shrink-0 px-1.5 py-0.5 text-[10px] rounded border ${deletable ? 'bg-emerald-950 text-emerald-400 border-emerald-800' : 'bg-cyan-950 text-cyan-400 border-cyan-800'}">${tag}</span>
+                            <span class="shrink-0 px-1.5 py-0.5 text-[10px] rounded border ${id !== BUILTIN.id ? 'bg-emerald-950 text-emerald-400 border-emerald-800' : 'bg-cyan-950 text-cyan-400 border-cyan-800'}">${tag}</span>
                         </span>
                         <span class="block text-[11px] text-slate-400 truncate">${detail}</span>
                     </span>
@@ -2014,8 +2016,8 @@
         function renderProjectList() {
             const official = data.versions[data.versions.length - 1];
             const member = isMember();
-            const cards = member || builtinPublic() ? [projectCard({
-                id: BUILTIN.id, name: BUILTIN.name, tag: '網站正式資料', visibility: member ? (builtinPublic() ? 'public' : 'private') : null,
+            const cards = !builtinHidden() && (member || builtinPublic()) ? [projectCard({
+                id: BUILTIN.id, name: BUILTIN.name, tag: '網站正式資料', deletable: member, visibility: member ? (builtinPublic() ? 'public' : 'private') : null,
                 detail: `${data.versions.length} 個版本 · 最新 ${official.version} ${official.total_volume.toLocaleString('en-US')} m³ · 更新 ${esc(data.generated_at)}`,
             })] : [];
             for (const p of projects.filter(canSee)) {
@@ -2035,6 +2037,7 @@
             document.getElementById('legacy-box').classList.toggle('hidden', !legacy.length);
             document.getElementById('legacy-count').innerText = legacy.length;
             document.getElementById('token-forget').classList.toggle('hidden', !member);
+            document.getElementById('builtin-restore').classList.toggle('hidden', !member || !builtinHidden());
             document.getElementById('member-login').classList.toggle('hidden', member);
             document.getElementById('member-note').classList.toggle('hidden', !member);
             document.getElementById('visitor-note').classList.toggle('hidden', member);
@@ -2042,6 +2045,12 @@
             document.getElementById('project-tools').classList.toggle('hidden', !member);
             document.getElementById('project-panel').classList.toggle('md:col-span-5', !member);
             document.getElementById('project-panel').classList.toggle('md:col-span-3', member);
+        }
+
+        async function restoreBuiltin() {
+            try { await commitProjects(list => list, `還原「${BUILTIN.name}」`, st => { delete st.builtin_hidden; return st; }); }
+            catch (e) { alert('還原失敗：' + e.message); }
+            renderProjectList();
         }
 
         async function toggleVisibility(id) {
@@ -2067,6 +2076,13 @@
         }
 
         async function deleteProject(id) {
+            if (id === BUILTIN.id) {
+                // 正式資料是 data.json（每週自動產生），不真的刪，只從清單移除；可以從下方「還原」找回
+                if (!confirm(`確定要從清單移除「${BUILTIN.name}」嗎？每台電腦都會看不到。它是網站的正式資料，不會真的刪掉，之後可以按下方「還原」找回來。`)) return;
+                try { await commitProjects(list => list, `移除「${BUILTIN.name}」`, st => ({ ...st, builtin_hidden: true })); }
+                catch (e) { alert('移除失敗：' + e.message); }
+                return renderProjectList();
+            }
             const p = findProject(id);
             if (!p || !confirm(`確定要刪除專案「${p.name}」嗎？每台電腦都會看不到（GitHub 的歷史紀錄裡還找得回來）。`)) return;
             try {
