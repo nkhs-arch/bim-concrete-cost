@@ -279,6 +279,10 @@ function g3Cost(lines, rates) {
       const keys = Object.keys(fr).map(k => [k, parseFloat(k)]);
       if (t && keys.length) rebarKg += v * fr[keys.reduce((x, y) => Math.abs(y[1] - t) < Math.abs(x[1] - t) ? y : x)[0]];
     } else if (key === 'RC 牆' && WALL_REBAR) { rebarKg += v * WALL_REBAR; out.rebarWalls = true; }
+    else if ((key === '梁' || key === '柱') && wh) {
+      const r = REBAR?.ratios?.[key === '梁' ? 'beams' : 'columns']?.[`${Math.round(wh[1])}X${Math.round(wh[2])}`];
+      if (r) rebarKg += v * r;
+    }
     if (!fw) continue;
     let m2 = 0;
     if (key === '梁' && wh) { const b = wh[1] / 100, h = wh[2] / 100; m2 = v / (b * h) * (b + 2 * Math.max(h - slabT, 0)); }
