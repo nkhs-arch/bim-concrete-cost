@@ -243,6 +243,7 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xebebe7, 700, 1500);
 const camera = new THREE.PerspectiveCamera(32, 1, 1, 6000);
 const controls = new OrbitControls(camera, renderer.domElement);
+window._v = { camera, controls };
 controls.enableDamping = true; controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI * 0.49; controls.minDistance = 25; controls.maxDistance = 1300;
 controls.enablePan = false;
@@ -561,9 +562,9 @@ function stepWind(dt) {
     p.addScaledVector(WD, sp);
     if (hasB) { const x = p.x + OX, y = p.z + OY; if (x > -4 && x < 64 && y > -4 && y < 34 && p.y < H + 3) p.y += sp * 0.9; else if (p.y > 3) p.y -= sp * 0.08; }
     if (p.dot(WD) > 115) resetW(i, false);
-    const t = WD.clone().multiplyScalar(5 + w.v * 5);
+    const t = WD.clone().multiplyScalar(4 + w.v * 4);
     // 線段＋箭頭（兩條斜邊）
-    const hx = t.x * 0.35, hz = t.z * 0.35, sx = -t.z * 0.22, sz = t.x * 0.22;
+    const hx = t.x * 0.22, hz = t.z * 0.22, sx = -t.z * 0.12, sz = t.x * 0.12;
     windPos.set([p.x, p.y, p.z, p.x - t.x, p.y, p.z - t.z,
       p.x, p.y, p.z, p.x - hx + sx, p.y, p.z - hz + sz,
       p.x, p.y, p.z, p.x - hx - sx, p.y, p.z - hz - sz], i * 18);
@@ -692,7 +693,7 @@ const CH = [
     <div class="figs one">${fig('wind', 'Forma 風環境｜流線（無量體）')}</div>
     <p class="note">資料來源：Autodesk Forma 風環境分析。</p>` },
 
-  { k: '風舒適', cam: [-32, 30, 175, 0, 6, 0], sets: ['green'], wind: true, html: () => `
+  { k: '風舒適', cam: [212, 32, 190, 0, 6, 0], sets: ['green'], wind: true, html: () => `
     ${eb(6, '風環境｜Lawson 舒適度')}
     <h2>L 形擋風，<br>花園在背風面</h2>
     <p class="lead">G3 把 FRC 機器人場地放在東北角、做成兩層高的 L 形，擋住北側與東側的風，西南角的花園與退台達到<em>「靜坐／站立」等級</em>，不用另外加擋風屏。</p>
