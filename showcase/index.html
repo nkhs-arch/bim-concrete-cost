@@ -295,9 +295,9 @@ function boxAt(parent, x0, y0, x1, y1, z0, z1, mat, edgeMat = M.edge) {
 }
 
 /* 地面、周邊建物、道路與綠地（OpenStreetMap） */
-// 基地在校園座標中的位置（估計）：建築西北角在南港高工中心往西 126 m、往南 43.5 m，
-// 校舍軸線較正北偏約 12°。要微調位置改這三個數字。
-const SITE = { nwX: -126.0, nwY: 43.5, rot: 0.2075 };
+// 基地在校園座標中的位置：模具工場與機械、水電工場之間的綠地（使用者 2026-11-27 確認）。
+// 建築西北角在南港高工中心往西 149.6 m、往北 65.4 m，校舍軸線較正北偏約 12°。
+const SITE = { nwX: -149.6, nwY: -65.4, rot: 0.2075 };
 const CU = [Math.cos(SITE.rot), -Math.sin(SITE.rot)], CV = [Math.sin(SITE.rot), Math.cos(SITE.rot)]; // 建築 x、y 軸在校園座標的方向
 const EAST = new THREE.Vector3(CU[0], 0, CV[0]), NORTH = new THREE.Vector3(-CU[1], 0, -CV[1]);
 const world = new THREE.Group(); scene.add(world);
@@ -330,9 +330,7 @@ fetch('context.txt').then(r => r.text()).then(txt => {
     const m = new THREE.Mesh(geo, M.ctx); m.castShadow = m.receiveShadow = true; ctx.add(m); addEdges(m, M.ctxEdge);
   }
 }).catch(() => { });
-// 南側第四工廠：開放街圖沒有，依基地資料補一個量體
-const southF = new THREE.Group(); world.add(southF);
-boxAt(southF, -2, 35.75, 62, 52, 0, 13, M.ctx, M.ctxEdge);
+const southF = new THREE.Group(); world.add(southF); // 南側工廠已在開放街圖中
 
 // 道路與綠地（OpenStreetMap，白模風格；平面分層用 renderOrder 排序、不寫深度，避免閃爍）
 const GM = {
