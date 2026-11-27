@@ -236,6 +236,50 @@ const PRICE_MONTH = D ? D.price_month : '2026-10';
 const HIST = D ? D.cost_history : [];
 const CF280 = D ? D.carbon_factors['280'].factor : 338;
 
+// 模板與磚：跟成本網站同一套算法（data/quantities.csv 逐列數量 × data/rates.json 單價與 LEBR 係數，單價依主計總處指數調整）
+const [QCSV, RATES] = await Promise.all([
+  fetch('../data/quantities.csv').then(r => r.ok ? r.text() : '').catch(() => ''),
+  fetch('../data/rates.json').then(r => r.json()).catch(() => null)
+]);
+function extraCost(csv, rates) {
+  const out = { fwM2: 0, fwCost: 0, fwC: 0, brPcs: 0, brCost: 0, brC: 0 };
+  if (!csv || !rates) return null;
+  const [head, ...rows] = csv.replace(/^\uFEFF/, '').trim().split(/\r?\n/).map(l => l.split(','));
+  const col = re => head.findIndex(h => re.test(h));
+  const ci = col(/計量類型|類別/), li = col(/樓層|位置/), ti = col(/類型/), vi = col(/體積/), ai = col(/面積/), ni = col(/個數/);
+  const ratio = kind => {
+    const e = D?.calc?.extra_index?.[kind], base = rates[kind]?.base_period;
+    if (!e?.series || !e.series[base]) return 1;
+    return e.series[Object.keys(e.series).sort().pop()] / e.series[base];
+  };
+  const fw = rates.formwork, br = rates.brick, slabT = fw.slab_thickness_cm / 100;
+  for (const r of rows) {
+    const cat = r[ci] || '', type = r[ti] || '', v = +r[vi] || 0, a = ai >= 0 ? +r[ai] || 0 : 0, n = Math.max(+r[ni] || 1, 1);
+    const wh = type.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/), th = type.match(/(\d+(?:\.\d+)?)\s*cm/i);
+    let m2 = 0;
+    if (/磚/.test(cat)) {
+      const t = th ? +th[1] : 12, spec = t >= br.full_from_cm ? br.full : br.half;
+      const area = a || v / (t / 100), pcs = area * spec.pieces * (1 + br.loss_rate), mortar = area * spec.mortar_m3 * (1 + br.loss_rate);
+      out.brPcs += pcs;
+      out.brCost += (pcs * br.brick_price + mortar * br.mortar_price) * ratio('brick');
+      out.brC += (pcs * br.carbon.per_piece + mortar * br.carbon.mortar_per_m3) / 1000;
+      continue;
+    }
+    if (/樑|梁/.test(cat) && wh) { const b = wh[1] / 100, h = wh[2] / 100; m2 = v / (b * h) * (b + 2 * Math.max(h - slabT, 0)); }
+    else if (/柱/.test(cat) && wh) { const b = wh[1] / 100, h = wh[2] / 100; m2 = v / (b * h) * 2 * (b + h); }
+    else if (/板/.test(cat)) {
+      const area = a || (th ? v / (th[1] / 100) : v * fw.fallback_ratio.floors);
+      m2 = /筏基|基礎/.test(r[li] || '') ? 4 * Math.sqrt(area / n) * n * (v / area) : area;
+    }
+    else if (/牆/.test(cat)) m2 = a ? a * 2 : th ? 2 * v / (th[1] / 100) : v * fw.fallback_ratio.walls;
+    out.fwM2 += m2;
+  }
+  out.fwCost = out.fwM2 * fw.price * ratio('formwork');
+  out.fwC = out.fwM2 * fw.carbon.per_m2 / 1000;
+  return out;
+}
+const X = extraCost(QCSV, RATES) || { fwM2: 0, fwCost: 0, fwC: 0, brPcs: 0, brCost: 0, brC: 0 };
+
 /* ---------- three.js 場景 ---------- */
 const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
@@ -704,7 +748,9 @@ function sparkSVG() {
   </svg>`;
 }
 
-const totalCarbon = V.carbon_tco2e + (R.carbon ? R.carbon.tco2e : 0);
+const totalCarbon = V.carbon_tco2e + (R.carbon ? R.carbon.tco2e : 0) + X.fwC + X.brC;
+const COSTS = [['混凝土', V.cost_at_current_price], ['鋼筋', R.cost || 0], ['模板', X.fwCost], ['紅磚', X.brCost]].filter(c => c[1] > 0);
+const costTotal = COSTS.reduce((t, c) => t + c[1], 0);
 const els = V.elements || {};
 const volMax = Math.max(...['floors', 'columns', 'beams'].map(k => (els[k] || {}).volume || 0));
 
@@ -821,29 +867,20 @@ const CH = [
     </div>
     <p class="note">資料來源：結構練習模型（${V.version}）Revit 明細表。</p>` },
 
-  { k: '混凝土', cam: [55, 22, 168, 0, 8, 0], sets: [], xray: true, slabHL: true, html: () => `
-    ${eb(11, '混凝土｜體積 × 最新單價')}
-    <h2>混凝土<br>${wan(V.cost_at_current_price)} 萬元</h2>
-    <p class="lead">樓板、柱、梁共 <em>${fmt(V.total_volume, 1)} m³</em>，280 kgf/cm² 預拌混凝土，北區 ${PRICE_MONTH} 單價每 m³ ${fmt(PRICE280)} 元。</p>
+  { k: '工程成本', cam: [55, 22, 168, 0, 8, 0], sets: [], xray: true, slabHL: true, html: () => `
+    ${eb(11, '工程成本｜' + COSTS.map(c => c[0]).join('・'))}
+    <h2>結構工程<br>約 ${wan(costTotal)} 萬元</h2>
+    <p class="lead">混凝土 <em>${fmt(V.total_volume, 1)} m³</em> × 北區 ${PRICE_MONTH} 單價每 m³ ${fmt(PRICE280)} 元；鋼筋依構件類型套用鋼筋比（加 10% 損耗）共 ${fmt(R.gross_weight_t, 1)} 噸，SD420W 每噸 ${fmt(R.price)} 元；模板依梁柱斷面與板厚推算 ${fmt(X.fwM2)} m²${X.brPcs ? `；紅磚 ${fmt(X.brPcs)} 塊（含砂漿）` : ''}。</p>
     <div class="rule"></div>
     <div class="bars">
-      ${bar('樓板', (els.floors || {}).volume || 0, volMax, fmt((els.floors || {}).volume || 0), true)}
-      ${bar('梁', (els.beams || {}).volume || 0, volMax, fmt((els.beams || {}).volume || 0))}
-      ${bar('柱', (els.columns || {}).volume || 0, volMax, fmt((els.columns || {}).volume || 0))}
+      ${COSTS.map((c, i) => bar(c[0], c[1], Math.max(...COSTS.map(x => x[1])), wan(c[1]), i === 0)).join('')}
     </div>
-    <div class="legend"><span>單位 m³</span></div>
-    <p class="note">資料來源：行政院公共工程委員會「大宗資材之混凝土價格調查」（pcic.pcc.gov.tw）；行政院主計總處營造工程物價指數（www.stat.gov.tw）。</p>` },
-
-  { k: '鋼筋', cam: [120, 20, 168, 0, 8, 0], sets: [], xray: true, slabHL: true, html: () => `
-    ${eb(12, '鋼筋｜鋼筋比 × 體積')}
-    <h2>鋼筋 ${fmt(R.gross_weight_t, 1)} 噸，<br>${wan(R.cost)} 萬元</h2>
-    <p class="lead">依構件類型套用鋼筋比（例如柱 75×75 為 188.5 kg/m³），再加 10% 損耗與搭接。鋼筋單價 SD420W 每噸 <em>${fmt(R.price)} 元</em>。</p>
-    <div class="rule"></div>
-    <div class="stats">${stat(wan(V.cost_at_current_price), '萬', '混凝土')}${stat(wan(R.cost), '萬', '鋼筋')}${stat(wan(R.total_cost || (V.cost_at_current_price + R.cost)), '萬', '合計', true)}</div>
-    <p class="note">資料來源：結構練習模型（${V.version}）Revit 鋼筋明細表。</p>` },
+    <div class="legend"><span>單位 萬元</span></div>
+    <div class="stats">${stat(wan(costTotal), '萬', '合計', true)}${stat(fmt(X.fwM2), 'm²', '模板')}</div>
+    <p class="note">資料來源：行政院公共工程委員會「大宗資材之混凝土價格調查」、鋼筋價格（pcic.pcc.gov.tw）；行政院主計總處營造工程物價指數（www.stat.gov.tw）；結構練習模型（${V.version}）Revit 明細表。</p>` },
 
   { k: '單價走勢', cam: [170, 24, 184, 0, 8, 0], rot: true, sets: [], xray: true, html: () => `
-    ${eb(13, '單價走勢｜同一個模型 × 每個月的單價')}
+    ${eb(12, '單價走勢｜同一個模型 × 每個月的單價')}
     <h2>同一棟樓，<br>每個月價錢不一樣</h2>
     <p class="lead">用目前模型的數量乘上過去 12 個月的單價，就能看出<em>何時發包比較划算</em>。最新 ${HIST.length ? HIST[HIST.length - 1].month : ''}：${HIST.length ? wan(HIST[HIST.length - 1].cost) : '-'} 萬元。</p>
     <div class="rule"></div>
@@ -851,19 +888,21 @@ const CH = [
     <p class="note">資料來源：行政院主計總處營造工程物價指數（www.stat.gov.tw），每週自動更新。</p>` },
 
   { k: '碳排放', cam: [-120, 22, 176, 0, 8, 0], sets: ['green'], xray: true, html: () => `
-    ${eb(14, '6D 永續｜蘊含碳')}
+    ${eb(13, '6D 永續｜蘊含碳')}
     <h2>蓋這些結構<br>排放約 ${fmt(totalCarbon)} 噸 CO₂e</h2>
-    <p class="lead">依內政部建築研究所<em>《低碳（低蘊含碳）建築評估手冊》（LEBR）</em>的算法：混凝土每 m³ 約 ${fmt(CF280)} kgCO₂e、鋼筋每 kg 約 ${R.carbon ? R.carbon.factor : 0.834} kgCO₂e，乘上模型數量。</p>
+    <p class="lead">依內政部建築研究所<em>《低碳（低蘊含碳）建築評估手冊》（LEBR）</em>的算法：混凝土每 m³ 約 ${fmt(CF280)} kgCO₂e、鋼筋每 kg 約 ${R.carbon ? R.carbon.factor : 0.834} kgCO₂e、木模板每 m² ${RATES ? RATES.formwork.carbon.per_m2.toFixed(2) : '1.00'} kgCO₂e、紅磚每塊 ${RATES ? RATES.brick.carbon.per_piece : 0.45} kgCO₂e，乘上模型數量。</p>
     <div class="rule"></div>
     <div class="bars">
       ${bar('混凝土', V.carbon_tco2e, totalCarbon, fmt(V.carbon_tco2e), true)}
       ${bar('鋼筋', R.carbon ? R.carbon.tco2e : 0, totalCarbon, fmt(R.carbon ? R.carbon.tco2e : 0))}
+      ${X.fwC ? bar('模板', X.fwC, totalCarbon, fmt(X.fwC, 1)) : ''}
+      ${X.brC ? bar('紅磚', X.brC, totalCarbon, fmt(X.brC, 1)) : ''}
     </div>
     <div class="legend"><span>單位 tCO₂e</span></div>
     <p class="note">資料來源：內政部建築研究所《低碳（低蘊含碳）建築評估手冊》（LEBR）建材碳排係數。</p>` },
 
   { k: '版本比較', cam: [-60, 30, 176, 0, 8, 0], sets: [], explode: true, xray: true, html: () => `
-    ${eb(15, '版本比較｜模型每次改版都留紀錄')}
+    ${eb(14, '版本比較｜模型每次改版都留紀錄')}
     <h2>改一次模型，<br>就知道差多少</h2>
     <p class="lead">系統偵測到體積檔變動，就自動建立新版本，列出每版的數量、成本與碳排<em>增減</em>，設計討論時有數字可以看。</p>
     <div class="rule"></div>
@@ -875,7 +914,7 @@ const CH = [
     <p class="note">資料來源：結構練習模型各版本 Revit 明細表，以目前單價重算。</p>` },
 
   { k: '現場試算', cam: [-20, 40, 460, 0, 0, 0], rot: true, sets: [], dur: 20, html: () => `
-    ${eb(16, '動手試試看')}
+    ${eb(15, '動手試試看')}
     <h2>掃 QR code，<br>自己操作成本網站</h2>
     <p class="lead">放入新的 Revit 明細表或 Forma 匯出 Excel，網站會用最新單價<em>當場重算</em>成本、鋼筋與碳排，也能依樓層或構件分區。</p>
     <button class="btn" id="openDash">開啟成本儀表板 →</button>
