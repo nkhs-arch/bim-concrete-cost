@@ -36,6 +36,9 @@ button{font:inherit;color:inherit}
 .lbl.big b{display:block;font-size:15px}
 .lbl.win{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .lbl small{color:var(--muted);font-family:var(--mono);font-size:11px}
+.lbl.flow{border-color:var(--accent);color:var(--accent);font-weight:600}
+.lbl.flow small{color:var(--ink-2);font-weight:400}
+.lbl.flow.calm{border-color:var(--green);color:var(--green)}
 .lbl.dim{background:transparent;border:none;font-family:var(--mono);font-size:12px;color:var(--ink-2);backdrop-filter:none;text-shadow:0 0 4px rgba(var(--bg-rgb),.9)}
 
 /* left fade + panel */
@@ -555,6 +558,43 @@ function resetW(i, first) {
   windData[i] = { p: new THREE.Vector3(-WD.z * side + WD.x * along, 1 + Math.random() * 26, WD.x * side + WD.z * along), v: 0.5 + Math.random() * 0.5 };
 }
 for (let i = 0; i < WN; i++) resetW(i, true);
+// 建築高度（依各層樓板外框）＋氣流前看：前方 28 m 內有建築就以約 1:3 的斜率提早抬升（弧形）
+const LV_ORDER = Object.keys(outlines).sort((a, b) => LV[a] - LV[b]);
+function topAt(x, y) { let h = 0; for (const lv of LV_ORDER) if (LV[lv] > h && inside(x, y, outlines[lv])) h = LV[lv]; return h ? Math.max(h, LV['2F']) : 0; }
+function flowWant(X, Z, base) {
+  let want = base;
+  for (let d = 0; d <= 28; d += 2) { const h = topAt(X + WD.x * d + OX, Z + WD.z * d + OY); if (h) want = Math.max(want, h + 3 - d * 0.33); }
+  return want;
+}
+// 主要流線（06 風舒適）：模擬幾條代表性的風，畫成粗線＋箭頭，並標出抬升與背風區
+const flowGrp = new THREE.Group(); scene.add(flowGrp); flowGrp.visible = false;
+const flowMat = new THREE.MeshBasicMaterial({ color: 0xd9902b }), flowMat2 = new THREE.MeshBasicMaterial({ color: 0xd9902b, transparent: true, opacity: 0.45 });
+const SIDE = new THREE.Vector3(-WD.z, 0, WD.x), CEN = new THREE.Vector3(...P(30, 15).flatMap((v, i) => i ? [0, v] : [v]));
+let flowRise = null, flowTop = null;
+for (const [off, base, main] of [[-20, 3, 0], [-8, 4, 1], [4, 3, 1], [16, 5, 0], [-32, 3, 0], [28, 3, 0]]) {
+  const pts = []; let p = CEN.clone().addScaledVector(SIDE, off).addScaledVector(WD, -95); p.y = base; let y = base, maxY = base;
+  for (let s = 0; s <= 190; s++) {
+    const want = flowWant(p.x, p.z, base); y += (want - y) * (want > y ? 0.16 : 0.045);
+    if (s % 3 === 0) pts.push(new THREE.Vector3(p.x, y, p.z));
+    if (main && !flowRise && y > base + 0.8) flowRise = new THREE.Vector3(p.x, y + 1.5, p.z);
+    if (main && y > maxY) { maxY = y; if (off === -8) flowTop = new THREE.Vector3(p.x, y + 2, p.z); }
+    p.addScaledVector(WD, 1);
+  }
+  const curve = new THREE.CatmullRomCurve3(pts), mat = main ? flowMat : flowMat2;
+  flowGrp.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 160, main ? 0.32 : 0.22, 6, false), mat));
+  for (const u of [0.3, 0.62, 0.99]) { // 箭頭
+    const pos = curve.getPointAt(u), tan = curve.getTangentAt(u);
+    const c = new THREE.Mesh(new THREE.ConeGeometry(main ? 1.1 : 0.8, main ? 3 : 2.2, 10), mat);
+    c.position.copy(pos); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tan); flowGrp.add(c);
+  }
+}
+{ // 風向流線標註（位置由流線模擬結果決定）
+  const toData3 = v => [v.x + OX, v.z + OY, v.y];
+  if (flowRise) { const [x, y, z] = toData3(flowRise); label('迎風面<br><small>氣流被抬升</small>', x, y, z, 'flow', ['flow']); }
+  if (flowTop) { const [x, y, z] = toData3(flowTop); label('越過屋頂', x, y, z, 'flow', ['flow']); }
+  label('背風面花園<br><small>風速降低・靜坐等級</small>', -6, 34, LV['2F'], 'flow calm', ['flow']);
+  const [ux, uy] = toData3(CEN.clone().addScaledVector(WD, -70)); label('東北風 NE 45°', ux, uy, 6, 'flow', ['flow']);
+}
 function stepWind(dt) {
   const hasB = bld.visible && bldAlpha > 0.5;
   for (let i = 0; i < WN; i++) {
@@ -562,13 +602,8 @@ function stepWind(dt) {
     p.addScaledVector(WD, sp);
     const y0 = p.y;
     if (hasB) {
-      // 往前看 30 m：快撞到建築就提早、平順地爬升，越過後再慢慢降回原高度（弧形）
-      let ahead = -1;
-      for (let d = 0; d <= 30; d += 3) { const x = p.x + WD.x * d + OX, y = p.z + WD.z * d + OY; if (x > -4 && x < 64 && y > -4 && y < 34) { ahead = d; break; } }
-      const top = H + 4, base = w.base ?? (w.base = p.y);
-      let want = base;
-      if (ahead >= 0 && base < top) { const k = 1 - ahead / 30; want = base + (top - base) * (k * k * (3 - 2 * k)); }
-      p.y += (want - p.y) * Math.min(1, dt * (want > p.y ? 3.5 : 0.8));
+      const base = w.base ?? (w.base = p.y), want = flowWant(p.x, p.z, base);
+      p.y += (want - p.y) * Math.min(1, sp * (want > p.y ? 0.16 : 0.045));
     }
     w.vy = (p.y - y0) / Math.max(sp, 1e-3);
     if (p.dot(WD) > 115) resetW(i, false);
@@ -704,7 +739,7 @@ const CH = [
     <div class="figs one">${fig('wind', 'Forma 風環境｜流線（無量體）')}</div>
     <p class="note">資料來源：Autodesk Forma 風環境分析。</p>` },
 
-  { k: '風舒適', cam: [212, 32, 190, 0, 6, 0], sets: ['green'], wind: true, html: () => `
+  { k: '風舒適', cam: [212, 32, 190, 0, 6, 0], sets: ['green', 'flow'], wind: true, flow: true, html: () => `
     ${eb(6, '風環境｜Lawson 舒適度')}
     <h2>L 形擋風，<br>花園在背風面</h2>
     <p class="lead">G3 把 FRC 機器人場地放在東北角、做成兩層高的 L 形，擋住北側與東側的風，西南角的花園與退台達到<em>「靜坐／站立」等級</em>，不用另外加擋風屏。</p>
@@ -848,7 +883,7 @@ function go(i) {
   bldTarget = c.bld ?? 1;
   explodeTarget = c.explode ? 1 : 0;
   cmp.visible = !!c.compare; ctx.visible = southF.visible = !c.compare && !c.xray; trees.visible = !c.compare; gardenGrp.visible = !!c.heat;
-  wind.visible = !!c.wind; pvGrp.visible = !!c.pv;
+  wind.visible = !!c.wind; pvGrp.visible = !!c.pv; flowGrp.visible = !!c.flow; wind.material.opacity = c.flow ? 0.3 : 0.7;
   outline.visible = !!c.dims || c.bld === 0; dimLines.visible = !!c.dims;
   frcGrp.visible = false;
   setOpacity([M.ext, M.win], c.xray ? 0.16 : 1); setOpacity([M.int], c.xray ? 0.5 : 1);
