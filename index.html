@@ -1497,10 +1497,68 @@
             try { return JSON.parse(localStorage.getItem(MAPPING_LOCAL_KEY) || 'null'); } catch { return null; }
         };
 
+        // Takeoff 算量包可能同時含好幾個模型（例如新舊版結構檔），有兩個以上時讓使用者勾選要算哪些
+        const DOC_COLUMNS = ['文档', '文檔', '文件', 'Document', 'Model'];
+        const UPDATED_COLUMNS = ['Item Updated At', '更新時間', '更新时间'];
+        function pickDocuments(file, docs) {
+            return new Promise((resolve, reject) => {
+                const box = document.createElement('div');
+                box.className = 'fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4';
+                const newest = docs.reduce((a, b) => (b.updated > a.updated ? b : a)).name;
+                box.innerHTML = `<div class="bg-dark-card border border-dark-border rounded-xl w-full max-w-xl text-xs">
+                    <div class="p-4 border-b border-dark-border">
+                        <h3 class="text-sm font-semibold text-white"><i class="fa-solid fa-layer-group mr-2 text-cyan-400"></i>選擇要計算的模型</h3>
+                        <p class="text-slate-400 mt-1"><span class="text-slate-200">${esc(file.name)}</span> 裡有 ${docs.length} 個模型，請勾選這次要算的（預設勾最近更新的那個）。</p>
+                    </div>
+                    <div class="p-4 space-y-2">${docs.map((d, i) => `
+                        <label class="flex items-center gap-3 p-2 rounded-lg border border-dark-border hover:border-cyan-700 cursor-pointer">
+                            <input type="checkbox" data-i="${i}" ${d.name === newest ? 'checked' : ''} class="accent-cyan-500">
+                            <span class="flex-1 text-slate-200 break-all">${esc(d.name || '（未標示模型）')}</span>
+                            <span class="text-slate-400 whitespace-nowrap">${d.count.toLocaleString('en-US')} 個構件${d.updated ? '・更新 ' + esc(d.updated.slice(0, 10)) : ''}</span>
+                        </label>`).join('')}
+                    </div>
+                    <div class="p-4 border-t border-dark-border flex gap-2 justify-end">
+                        <button data-act="cancel" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition">取消</button>
+                        <button data-act="ok" class="bg-gradient-to-r from-emerald-600 to-cyan-600 text-white px-4 py-1.5 rounded-lg transition">確定</button>
+                    </div></div>`;
+                box.onclick = e => {
+                    const act = e.target.closest('button')?.dataset.act;
+                    if (!act) return;
+                    if (act === 'cancel') { box.remove(); return reject(new Error('已取消選擇模型')); }
+                    const chosen = new Set([...box.querySelectorAll('input:checked')].map(c => docs[+c.dataset.i].name));
+                    if (!chosen.size) return;
+                    box.remove();
+                    resolve(chosen);
+                };
+                document.body.appendChild(box);
+            });
+        }
+
+        async function filterDocuments(file, sheets) {
+            const detail = sheets[0];
+            const h = detectHeader(detail.rows), header = detail.rows[h] || [];
+            const di = header.findIndex(c => DOC_COLUMNS.includes(c));
+            if (di < 0) return sheets;
+            const ui = header.findIndex(c => UPDATED_COLUMNS.includes(c));
+            const docs = {};
+            for (const r of detail.rows.slice(h + 1)) {
+                const d = docs[r[di]] ??= { name: r[di], count: 0, updated: '' };
+                d.count++;
+                const u = ui < 0 ? '' : /^\d{5}(\.\d+)?$/.test(r[ui]) ? new Date(Math.round((+r[ui] - 25569) * 864e5)).toISOString() : String(r[ui]);   // Excel 日期序號轉成 ISO
+                if (u > d.updated) d.updated = u;
+            }
+            const list = Object.values(docs);
+            if (list.length < 2) return sheets;
+            const chosen = await pickDocuments(file, list);
+            // 摘要頁是所有模型的合計，篩選後只留明細頁
+            return [{ ...detail, rows: [...detail.rows.slice(0, h + 1), ...detail.rows.slice(h + 1).filter(r => chosen.has(r[di]))] }];
+        }
+
         // 讀檔 → 對照 → 標準欄位。自動對照有問題（或 force）時跳出對照畫面
         async function mapQuantityFile(file, calc, { saved = savedMapping(), force = false } = {}) {
-            const sheets = await readSheets(file);
+            let sheets = await readSheets(file);
             if (!sheets.length) throw new Error('檔案裡沒有資料列');
+            sheets = await filterDocuments(file, sheets);
             const m = guessMapping(sheets, file.name, saved);
             const ev = evaluateMapping(sheets, m, calc);
             if (!force && ev.error) {
