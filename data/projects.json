@@ -8,33 +8,6 @@
    "updated_at": "2026-11-27",
    "versions": [
     {
-     "file": "專題 G3 建築空間分配-檢查 Takeoff Inventory - 2026-11-27-202611270751.xlsx",
-     "date": "2026-11-27",
-     "total_volume": 2776.77,
-     "lines": [
-      {
-       "category": "牆",
-       "level": "",
-       "type": "",
-       "spec": "",
-       "count": 159,
-       "volume": 1567.34,
-       "area": 0,
-       "length": 0
-      },
-      {
-       "category": "樓板",
-       "level": "",
-       "type": "",
-       "spec": "",
-       "count": 11,
-       "volume": 1209.43,
-       "area": 0,
-       "length": 0
-      }
-     ]
-    },
-    {
      "file": "專題 G3 建築空間分配-檢查 Takeoff Inventory - 2026-11-27-202611270834.xlsx",
      "date": "2026-11-27",
      "total_volume": 3856.77,
