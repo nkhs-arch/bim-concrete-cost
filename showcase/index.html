@@ -642,7 +642,7 @@ const CH = [
     <div class="stats">${stat('60×30', 'm', '建築外框')}${stat(fmt(GFA_TOTAL), 'm²', 'G3 總樓地板')}${stat(H.toFixed(1), 'm', '4 層，屋頂高度')}</div>
     <p class="hint">按 → 或空白鍵開始，F 全螢幕；三維畫面可拖曳旋轉、雙指縮放。</p>` },
 
-  { k: '緣起', cam: [28, 16, 154], night: true, sets: [], dur: 14, html: () => `
+  { k: '緣起', cam: [-35, 26, 185], night: true, sets: [], dur: 14, html: () => `
     ${eb(1, '選手訓練現況問卷｜22 份、7 科')}
     <h2>晚上八點以後，<br>工廠的燈還亮著</h2>
     <p class="lead">技能競賽選手和一般學生共用工廠，練習集中在放學後與假日。我們發問卷給各科選手，結果顯示需要一棟<em>能單獨開放、晚上也安全好用</em>的訓練大樓。</p>
@@ -905,7 +905,7 @@ controls.addEventListener('start', () => { rotating = false; camAnim = null; });
 /* ---------- 迴圈 ---------- */
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); labelR.setSize(w, h); camera.aspect = w / h;
   const narrow = w < 900 || h > w; // 桌機：畫面往右移讓出左邊文字區；直式：往上移讓出下方文字
-  camera.setViewOffset(w, h, narrow ? 0 : -w * 0.17, narrow ? h * 0.27 : 0, w, h); camera.updateProjectionMatrix(); }
+  camera.setViewOffset(w, h, narrow ? 0 : -w * 0.2, narrow ? h * 0.27 : 0, w, h); camera.updateProjectionMatrix(); }
 addEventListener('resize', () => { resize(); const c = CH[cur]; if (c) { const [az, el, dist, tx, ty, tz] = c.cam; flyTo(camPose(az, el, dist, tx ?? 0, ty ?? 6, tz ?? 0), 600); } });
 resize();
 const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
