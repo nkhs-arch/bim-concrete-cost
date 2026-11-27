@@ -133,6 +133,133 @@
        "length": 0
       }
      ]
+    },
+    {
+     "file": "專題 G3 建築空間分配-檢查 Takeoff Inventory - 2026-11-27-202611270841.xlsx",
+     "date": "2026-11-27",
+     "total_volume": 3856.77,
+     "lines": [
+      {
+       "category": "牆",
+       "level": "1FL",
+       "type": "",
+       "spec": "",
+       "count": 35,
+       "volume": 500.65,
+       "area": 2542.944999999999,
+       "length": 0
+      },
+      {
+       "category": "牆",
+       "level": "2FL",
+       "type": "",
+       "spec": "",
+       "count": 36,
+       "volume": 447.44,
+       "area": 2324.105,
+       "length": 0
+      },
+      {
+       "category": "牆",
+       "level": "3FL",
+       "type": "",
+       "spec": "",
+       "count": 39,
+       "volume": 304.18,
+       "area": 1594.2760000000005,
+       "length": 0
+      },
+      {
+       "category": "牆",
+       "level": "筏基",
+       "type": "",
+       "spec": "",
+       "count": 4,
+       "volume": 5.63,
+       "area": 30.550000000000004,
+       "length": 0
+      },
+      {
+       "category": "牆",
+       "level": "4FL",
+       "type": "",
+       "spec": "",
+       "count": 39,
+       "volume": 282.44,
+       "area": 1476.7209999999993,
+       "length": 0
+      },
+      {
+       "category": "牆",
+       "level": "RFL",
+       "type": "",
+       "spec": "",
+       "count": 6,
+       "volume": 27,
+       "area": 180,
+       "length": 0
+      },
+      {
+       "category": "樓板",
+       "level": "1FL",
+       "type": "",
+       "spec": "",
+       "count": 1,
+       "volume": 355.39,
+       "area": 1776.9599999999996,
+       "length": 0
+      },
+      {
+       "category": "樓板",
+       "level": "2FL",
+       "type": "",
+       "spec": "",
+       "count": 1,
+       "volume": 253.43,
+       "area": 1689.5199999999998,
+       "length": 0
+      },
+      {
+       "category": "樓板",
+       "level": "筏基",
+       "type": "",
+       "spec": "",
+       "count": 2,
+       "volume": 1080,
+       "area": 1799.9999999999995,
+       "length": 0
+      },
+      {
+       "category": "樓板",
+       "level": "3FL",
+       "type": "",
+       "spec": "",
+       "count": 4,
+       "volume": 272.18,
+       "area": 1689.5199999999995,
+       "length": 0
+      },
+      {
+       "category": "樓板",
+       "level": "4FL",
+       "type": "",
+       "spec": "",
+       "count": 3,
+       "volume": 137.18,
+       "area": 864.5199999999998,
+       "length": 0
+      },
+      {
+       "category": "樓板",
+       "level": "RFL",
+       "type": "",
+       "spec": "",
+       "count": 2,
+       "volume": 191.25,
+       "area": 1274.9999999999995,
+       "length": 0
+      }
+     ]
     }
    ],
    "mapping": {
@@ -146,7 +273,7 @@
      "level": "位置",
      "spec": "",
      "item": "行项目名称",
-     "area": "",
+     "area": "Area (M2)",
      "length": ""
     },
     "fixed": "",
