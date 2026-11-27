@@ -236,28 +236,33 @@ const PRICE_MONTH = D ? D.price_month : '2026-10';
 const HIST = D ? D.cost_history : [];
 const CF280 = D ? D.carbon_factors['280'].factor : 338;
 
-// 模板與磚：跟成本網站同一套算法（data/quantities.csv 逐列數量 × data/rates.json 單價與 LEBR 係數，單價依主計總處指數調整）
-const [QCSV, RATES] = await Promise.all([
-  fetch('../data/quantities.csv').then(r => r.ok ? r.text() : '').catch(() => ''),
-  fetch('../data/rates.json').then(r => r.json()).catch(() => null)
+// 成本數字讀成本網站上的 G3 專案（data/projects.json「選手大樓-新版」最新版本的逐列數量），
+// 跟成本網站同一套算法：混凝土 × 工程會單價、鋼筋比、模板（模型面積）、紅磚，單價依主計總處指數調整，碳排用 LEBR 係數
+const G3_PROJECT = { id: 'pmwyoqd8nagpf', name: '選手大樓-新版' };
+const WALL_REBAR = null;   // RC 牆鋼筋比（kg/m³），給數字後鋼筋才會算牆
+const [PROJS, RATES, REBAR] = await Promise.all([
+  fetch('../data/projects.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),
+  fetch('../data/rates.json').then(r => r.json()).catch(() => null),
+  fetch('../data/rebar.json').then(r => r.json()).catch(() => null)
 ]);
-function extraCost(csv, rates) {
-  const out = { fwM2: 0, fwCost: 0, fwC: 0, brPcs: 0, brCost: 0, brC: 0 };
-  if (!csv || !rates) return null;
-  const [head, ...rows] = csv.replace(/^\uFEFF/, '').trim().split(/\r?\n/).map(l => l.split(','));
-  const col = re => head.findIndex(h => re.test(h));
-  const ci = col(/計量類型|類別/), li = col(/樓層|位置/), ti = col(/類型/), vi = col(/體積/), ai = col(/面積/), ni = col(/個數/);
+const PROJ = (PROJS?.projects || []).find(p => p.id === G3_PROJECT.id) || (PROJS?.projects || []).find(p => p.name === G3_PROJECT.name);
+const PV = PROJ ? PROJ.versions[PROJ.versions.length - 1] : null;
+const GLINES = PV ? PV.lines : [];
+function g3Cost(lines, rates) {
+  const out = { vol: 0, conc: 0, concC: 0, rebarT: 0, rebarCost: 0, rebarC: 0, rebarWalls: false, fwM2: 0, fwCost: 0, fwC: 0, brPcs: 0, brCost: 0, brC: 0, byCat: {} };
   const ratio = kind => {
-    const e = D?.calc?.extra_index?.[kind], base = rates[kind]?.base_period;
+    const e = D?.calc?.extra_index?.[kind], base = rates?.[kind]?.base_period;
     if (!e?.series || !e.series[base]) return 1;
     return e.series[Object.keys(e.series).sort().pop()] / e.series[base];
   };
-  const fw = rates.formwork, br = rates.brick, slabT = fw.slab_thickness_cm / 100;
-  for (const r of rows) {
-    const cat = r[ci] || '', type = r[ti] || '', v = +r[vi] || 0, a = ai >= 0 ? +r[ai] || 0 : 0, n = Math.max(+r[ni] || 1, 1);
+  const fw = rates?.formwork, br = rates?.brick, slabT = fw ? fw.slab_thickness_cm / 100 : 0.15;
+  const fr = REBAR?.ratios?.floors || {};
+  let rebarKg = 0;
+  for (const l of lines) {
+    const cat = l.category || '', type = l.type || '', v = +l.volume || 0, a = +l.area || 0, n = Math.max(+l.count || 1, 1);
     const wh = type.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/), th = type.match(/(\d+(?:\.\d+)?)\s*cm/i);
-    let m2 = 0;
     if (/磚/.test(cat)) {
+      if (!br) continue;
       const t = th ? +th[1] : 12, spec = t >= br.full_from_cm ? br.full : br.half;
       const area = a || v / (t / 100), pcs = area * spec.pieces * (1 + br.loss_rate), mortar = area * spec.mortar_m3 * (1 + br.loss_rate);
       out.brPcs += pcs;
@@ -265,20 +270,40 @@ function extraCost(csv, rates) {
       out.brC += (pcs * br.carbon.per_piece + mortar * br.carbon.mortar_per_m3) / 1000;
       continue;
     }
-    if (/樑|梁/.test(cat) && wh) { const b = wh[1] / 100, h = wh[2] / 100; m2 = v / (b * h) * (b + 2 * Math.max(h - slabT, 0)); }
-    else if (/柱/.test(cat) && wh) { const b = wh[1] / 100, h = wh[2] / 100; m2 = v / (b * h) * 2 * (b + h); }
-    else if (/板/.test(cat)) {
+    out.vol += v;
+    const key = /樑|梁/.test(cat) ? '梁' : /柱/.test(cat) ? '柱' : /板/.test(cat) ? '樓板' : /牆/.test(cat) ? 'RC 牆' : cat;
+    out.byCat[key] = (out.byCat[key] || 0) + v;
+    // 鋼筋：樓板用面積反推板厚，套最接近板厚的鋼筋比；牆用 WALL_REBAR
+    if (key === '樓板') {
+      const t = th ? +th[1] : a ? v / a * 100 : 0;
+      const keys = Object.keys(fr).map(k => [k, parseFloat(k)]);
+      if (t && keys.length) rebarKg += v * fr[keys.reduce((x, y) => Math.abs(y[1] - t) < Math.abs(x[1] - t) ? y : x)[0]];
+    } else if (key === 'RC 牆' && WALL_REBAR) { rebarKg += v * WALL_REBAR; out.rebarWalls = true; }
+    if (!fw) continue;
+    let m2 = 0;
+    if (key === '梁' && wh) { const b = wh[1] / 100, h = wh[2] / 100; m2 = v / (b * h) * (b + 2 * Math.max(h - slabT, 0)); }
+    else if (key === '柱' && wh) { const b = wh[1] / 100, h = wh[2] / 100; m2 = v / (b * h) * 2 * (b + h); }
+    else if (key === '樓板') {
       const area = a || (th ? v / (th[1] / 100) : v * fw.fallback_ratio.floors);
-      m2 = /筏基|基礎/.test(r[li] || '') ? 4 * Math.sqrt(area / n) * n * (v / area) : area;
+      m2 = /筏基|基礎/.test(l.level || '') ? 4 * Math.sqrt(area / n) * n * (v / area) : area;
     }
-    else if (/牆/.test(cat)) m2 = a ? a * 2 : th ? 2 * v / (th[1] / 100) : v * fw.fallback_ratio.walls;
+    else if (key === 'RC 牆') m2 = a ? a * 2 : th ? 2 * v / (th[1] / 100) : v * fw.fallback_ratio.walls;
     out.fwM2 += m2;
   }
-  out.fwCost = out.fwM2 * fw.price * ratio('formwork');
-  out.fwC = out.fwM2 * fw.carbon.per_m2 / 1000;
+  out.conc = out.vol * PRICE280;
+  out.concC = out.vol * CF280 / 1000;
+  const loss = REBAR?.loss_rate ?? 0.1;
+  out.rebarT = rebarKg * (1 + loss) / 1000;
+  out.rebarCost = out.rebarT * (R.price || 0);
+  out.rebarC = out.rebarT * 1000 * (R.carbon ? R.carbon.factor : 0) / 1000;
+  if (fw) { out.fwCost = out.fwM2 * fw.price * ratio('formwork'); out.fwC = out.fwM2 * fw.carbon.per_m2 / 1000; }
   return out;
 }
-const X = extraCost(QCSV, RATES) || { fwM2: 0, fwCost: 0, fwC: 0, brPcs: 0, brCost: 0, brC: 0 };
+const X = g3Cost(GLINES, RATES);
+// 鋼筋只算到樓板時先不顯示（等牆的鋼筋比）
+const SHOW_REBAR = X.rebarT > 0 && (X.rebarWalls || !X.byCat['RC 牆']);
+// 12 個月走勢：同一組單價指數，按 G3 混凝土量等比例換算
+const HIST_G3 = HIST.map(h => ({ ...h, cost: V.cost_at_current_price ? h.cost * X.conc / V.cost_at_current_price : h.cost }));
 
 /* ---------- three.js 場景 ---------- */
 const stage = document.getElementById('stage');
@@ -733,8 +758,8 @@ const fig = (src, cap) => `<figure data-src="img/${src}.jpg" data-cap="${cap}"><
 const eb = (i, txt) => `<div class="eyebrow"><span class="no">${String(i).padStart(2, '0')}</span>${txt}</div>`;
 
 function sparkSVG() {
-  if (!HIST.length) return '';
-  const vs = HIST.map(h => h.cost), mn = Math.min(...vs), mx = Math.max(...vs), W = 440, Hh = 110;
+  if (!HIST_G3.length) return '';
+  const vs = HIST_G3.map(h => h.cost), mn = Math.min(...vs), mx = Math.max(...vs), W = 440, Hh = 110;
   const xy = vs.map((v, i) => [i / (vs.length - 1) * W, 10 + (1 - (v - mn) / (mx - mn || 1)) * (Hh - 30)]);
   const d = xy.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
   const last = xy[xy.length - 1];
@@ -742,14 +767,14 @@ function sparkSVG() {
     <path d="${d} L ${W} ${Hh} L 0 ${Hh} Z" fill="var(--accent-soft)" opacity=".7"/>
     <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
     <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--accent)"/>
-    <text x="0" y="${Hh + 10}" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono">${HIST[0].month}</text>
-    <text x="${W}" y="${Hh + 10}" font-size="11" fill="var(--muted)" text-anchor="end" font-family="IBM Plex Mono">${HIST[HIST.length - 1].month}</text>
+    <text x="0" y="${Hh + 10}" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono">${HIST_G3[0].month}</text>
+    <text x="${W}" y="${Hh + 10}" font-size="11" fill="var(--muted)" text-anchor="end" font-family="IBM Plex Mono">${HIST_G3[HIST_G3.length - 1].month}</text>
     <text x="0" y="10" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono">${wan(mx)} 萬</text>
   </svg>`;
 }
 
-const totalCarbon = V.carbon_tco2e + (R.carbon ? R.carbon.tco2e : 0) + X.fwC + X.brC;
-const COSTS = [['混凝土', V.cost_at_current_price], ['鋼筋', R.cost || 0], ['模板', X.fwCost], ['紅磚', X.brCost]].filter(c => c[1] > 0);
+const totalCarbon = X.concC + (SHOW_REBAR ? X.rebarC : 0) + X.fwC + X.brC;
+const COSTS = [['混凝土', X.conc], ['鋼筋', SHOW_REBAR ? X.rebarCost : 0], ['模板', X.fwCost], ['紅磚', X.brCost]].filter(c => c[1] > 0);
 const costTotal = COSTS.reduce((t, c) => t + c[1], 0);
 const els = V.elements || {};
 const volMax = Math.max(...['floors', 'columns', 'beams'].map(k => (els[k] || {}).volume || 0));
@@ -870,19 +895,19 @@ const CH = [
   { k: '工程成本', cam: [55, 22, 168, 0, 8, 0], sets: [], xray: true, slabHL: true, html: () => `
     ${eb(11, '工程成本｜' + COSTS.map(c => c[0]).join('・'))}
     <h2>結構工程<br>約 ${wan(costTotal)} 萬元</h2>
-    <p class="lead">混凝土 <em>${fmt(V.total_volume, 1)} m³</em> × 北區 ${PRICE_MONTH} 單價每 m³ ${fmt(PRICE280)} 元；鋼筋依構件類型套用鋼筋比（加 10% 損耗）共 ${fmt(R.gross_weight_t, 1)} 噸，SD420W 每噸 ${fmt(R.price)} 元；模板依梁柱斷面與板厚推算 ${fmt(X.fwM2)} m²${X.brPcs ? `；紅磚 ${fmt(X.brPcs)} 塊（含砂漿）` : ''}。</p>
+    <p class="lead">${Object.entries(X.byCat).map(([k, v]) => `${k} ${fmt(v)}`).join('、')}，共 <em>${fmt(X.vol, 1)} m³</em> 混凝土 × 北區 ${PRICE_MONTH} 單價每 m³ ${fmt(PRICE280)} 元${SHOW_REBAR ? `；鋼筋依鋼筋比（加 10% 損耗）共 ${fmt(X.rebarT, 1)} 噸，SD420W 每噸 ${fmt(R.price)} 元` : ''}；模板依模型面積計算 ${fmt(X.fwM2)} m²${X.brPcs ? `；紅磚 ${fmt(X.brPcs)} 塊（含砂漿）` : ''}。</p>
     <div class="rule"></div>
     <div class="bars">
       ${COSTS.map((c, i) => bar(c[0], c[1], Math.max(...COSTS.map(x => x[1])), wan(c[1]), i === 0)).join('')}
     </div>
     <div class="legend"><span>單位 萬元</span></div>
     <div class="stats">${stat(wan(costTotal), '萬', '合計', true)}${stat(fmt(X.fwM2), 'm²', '模板')}</div>
-    <p class="note">資料來源：行政院公共工程委員會「大宗資材之混凝土價格調查」、鋼筋價格（pcic.pcc.gov.tw）；行政院主計總處營造工程物價指數（www.stat.gov.tw）；結構練習模型（${V.version}）Revit 明細表。</p>` },
+    <p class="note">資料來源：行政院公共工程委員會「大宗資材之混凝土價格調查」、鋼筋價格（pcic.pcc.gov.tw）；行政院主計總處營造工程物價指數（www.stat.gov.tw）；G3 模型 Forma Takeoff 算量（${PV ? PV.date : ''}）。</p>` },
 
   { k: '單價走勢', cam: [170, 24, 184, 0, 8, 0], rot: true, sets: [], xray: true, html: () => `
     ${eb(12, '單價走勢｜同一個模型 × 每個月的單價')}
     <h2>同一棟樓，<br>每個月價錢不一樣</h2>
-    <p class="lead">用目前模型的數量乘上過去 12 個月的單價，就能看出<em>何時發包比較划算</em>。最新 ${HIST.length ? HIST[HIST.length - 1].month : ''}：${HIST.length ? wan(HIST[HIST.length - 1].cost) : '-'} 萬元。</p>
+    <p class="lead">用目前模型的數量乘上過去 12 個月的單價，就能看出<em>何時發包比較划算</em>。最新 ${HIST_G3.length ? HIST_G3[HIST_G3.length - 1].month : ''}：混凝土 ${HIST_G3.length ? wan(HIST_G3[HIST_G3.length - 1].cost) : '-'} 萬元。</p>
     <div class="rule"></div>
     ${sparkSVG()}
     <p class="note">資料來源：行政院主計總處營造工程物價指數（www.stat.gov.tw），每週自動更新。</p>` },
@@ -890,11 +915,11 @@ const CH = [
   { k: '碳排放', cam: [-120, 22, 176, 0, 8, 0], sets: ['green'], xray: true, html: () => `
     ${eb(13, '6D 永續｜蘊含碳')}
     <h2>蓋這些結構<br>排放約 ${fmt(totalCarbon)} 噸 CO₂e</h2>
-    <p class="lead">依內政部建築研究所<em>《低碳（低蘊含碳）建築評估手冊》（LEBR）</em>的算法：混凝土每 m³ 約 ${fmt(CF280)} kgCO₂e、鋼筋每 kg 約 ${R.carbon ? R.carbon.factor : 0.834} kgCO₂e、木模板每 m² ${RATES ? RATES.formwork.carbon.per_m2.toFixed(2) : '1.00'} kgCO₂e、紅磚每塊 ${RATES ? RATES.brick.carbon.per_piece : 0.45} kgCO₂e，乘上模型數量。</p>
+    <p class="lead">依內政部建築研究所<em>《低碳（低蘊含碳）建築評估手冊》（LEBR）</em>的算法：混凝土每 m³ 約 ${fmt(CF280)} kgCO₂e、${SHOW_REBAR ? `鋼筋每 kg 約 ${R.carbon ? R.carbon.factor : 0.834} kgCO₂e、` : ''}木模板每 m² ${RATES ? RATES.formwork.carbon.per_m2.toFixed(2) : '1.00'} kgCO₂e、紅磚每塊 ${RATES ? RATES.brick.carbon.per_piece : 0.45} kgCO₂e，乘上模型數量。</p>
     <div class="rule"></div>
     <div class="bars">
-      ${bar('混凝土', V.carbon_tco2e, totalCarbon, fmt(V.carbon_tco2e), true)}
-      ${bar('鋼筋', R.carbon ? R.carbon.tco2e : 0, totalCarbon, fmt(R.carbon ? R.carbon.tco2e : 0))}
+      ${bar('混凝土', X.concC, totalCarbon, fmt(X.concC), true)}
+      ${SHOW_REBAR ? bar('鋼筋', X.rebarC, totalCarbon, fmt(X.rebarC)) : ''}
       ${X.fwC ? bar('模板', X.fwC, totalCarbon, fmt(X.fwC, 1)) : ''}
       ${X.brC ? bar('紅磚', X.brC, totalCarbon, fmt(X.brC, 1)) : ''}
     </div>
@@ -932,7 +957,7 @@ CH.forEach((c, i) => {
   b.innerHTML = `<span class="n">${String(i).padStart(2, '0')}</span><span class="t">${c.k}</span><span class="pg"></span>`;
   b.onclick = () => { go(i); poke(); }; nav.appendChild(b);
 });
-document.getElementById('srcnote').textContent = `模型：G3 量體（Dynamo 自動建模）｜地圖 © OpenStreetMap 貢獻者｜成本：結構練習模型 ${V.version}，${PRICE_MONTH} 單價`;
+document.getElementById('srcnote').textContent = `模型：G3 量體（Dynamo 自動建模）｜地圖 © OpenStreetMap 貢獻者｜成本：G3 模型 Forma Takeoff 算量，${PRICE_MONTH} 單價`;
 
 let cur = -1, bldAlpha = 1, bldTarget = 1, explodeT = 0, explodeTarget = 0, sunAnim = null, sunHour = 6;
 // 切換 transparent 時要重新編譯 shader（three.js 的 OPAQUE 會把 alpha 固定為 1），否則會半透明不寫深度而破圖
