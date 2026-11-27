@@ -107,6 +107,7 @@ table.cmp .win{color:var(--accent)}
 .figs.one{grid-template-columns:1fr}
 figure{margin:0;cursor:zoom-in}
 figure img{width:100%;display:block;border:1px solid var(--line);aspect-ratio:16/9;object-fit:cover;background:var(--line)}
+.figs.wide img{aspect-ratio:3/1}
 figcaption{font-size:11.5px;color:var(--muted);margin-top:5px}
 .btn{display:inline-flex;align-items:center;gap:8px;margin-top:18px;background:var(--ink);color:var(--bg);border:none;padding:11px 18px;font-size:14px;border-radius:3px;cursor:pointer;text-decoration:none}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--ink-2)}
@@ -759,7 +760,7 @@ function flyTo(pose, dur = 1800) {
 /* ---------- 章節 ---------- */
 const bar = (name, val, max, txt, hl) => `<div class="bar${hl ? ' hl' : ''}"><span>${name}</span><span class="t"><i style="width:${Math.max(2, val / max * 100)}%"></i></span><span class="n">${txt}</span></div>`;
 const stat = (v, u, k, hl) => `<div class="stat${hl ? ' hl' : ''}"><div class="v">${v}<small>${u}</small></div><div class="k">${k}</div></div>`;
-const IMG_V = '20261127b';   // 換圖時改這個，避免瀏覽器用舊的快取圖
+const IMG_V = '20261127c';   // 換圖時改這個，避免瀏覽器用舊的快取圖
 const fig = (src, cap) => `<figure data-src="img/${src}.jpg?v=${IMG_V}" data-cap="${cap}"><img src="img/${src}.jpg?v=${IMG_V}" alt="${cap}" loading="lazy"><figcaption>${cap}</figcaption></figure>`;
 const eb = (i, txt) => `<div class="eyebrow"><span class="no">${String(i).padStart(2, '0')}</span>${txt}</div>`;
 
@@ -868,7 +869,7 @@ const CH = [
     <div class="rule"></div>
     <div class="stats">${stat('1,275', 'm²', '頂層屋頂')}${stat('60', '%', '光電覆蓋')}${stat('13.0', '萬 kWh', '年發電量', true)}</div>
     <p class="note">資料來源：Autodesk Forma 太陽能分析。</p>
-    <div class="figs one" style="margin-top:18px">${fig('solar', 'Forma 太陽能分析（G3 頂層屋頂，0–10° 平面）')}</div>` },
+    <div class="figs one wide" style="margin-top:14px">${fig('solar', 'Forma 太陽能分析（G3 頂層屋頂，0–10° 平面）')}</div>` },
 
   { k: '量體比選', cam: [0, 24, 470, -GAP * 1.1, 8, 0], sets: ['cmp'], compare: true, html: () => `
     ${eb(9, '三量體比選｜依分析結果')}
