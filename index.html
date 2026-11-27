@@ -645,7 +645,7 @@
             setupHome();
             // 網址後面有 #project=… 就直接開那個專案（重新整理不會跳回主畫面），否則先顯示主畫面
             const id = new URLSearchParams(location.hash.slice(1)).get('project');
-            if (id !== BUILTIN.id) await refreshProjects();
+            await refreshProjects();
             if (id && (id === BUILTIN.id || findProject(id))) await openProject(id);
             else showHome();
             // 主畫面跟專案之間切換一律重新載入，避免上一個專案的資料殘留
@@ -1762,7 +1762,8 @@
         const LEGACY_KEY = 'bim-projects-v1';   // 舊版存在瀏覽器裡的專案
         const BUILTIN = { id: 'builtin', name: '選手大樓' };
         let projects = [];           // 共用專案（從 GitHub 讀來的）
-        let projectsNote = '';       // 讀取時的提醒（例如 GitHub 暫時連不到）
+        let projectsNote = '';
+        let projectSettings = {};    // 清單層級設定（例如「選手大樓」公開或私人）       // 讀取時的提醒（例如 GitHub 暫時連不到）
         let currentProject = null;   // 目前開啟的自建專案（選手大樓時是 null）
         let newProjectFile = null;   // 主畫面「建立新專案」選好的檔案
 
@@ -1782,13 +1783,13 @@
                 if (r.status === 404) return { list: [], sha: null };
                 if (r.status === 401 && token) { setToken(''); return fetchProjects({ strict }); }
                 if (!r.ok) throw new Error(`GitHub 回應 ${r.status}`);
-                const j = await r.json();
-                return { list: validProjects(JSON.parse(b64decode(j.content)).projects), sha: j.sha };
+                const j = await r.json(), doc = JSON.parse(b64decode(j.content));
+                return { list: validProjects(doc.projects), settings: doc.settings || {}, sha: j.sha };
             } catch (e) {
                 if (strict) throw new Error('連不到 GitHub：' + e.message);
                 try {
                     const j = await (await fetch(PROJECTS_PATH, { cache: 'no-store' })).json();
-                    return { list: validProjects(j.projects), sha: null, note: 'GitHub 暫時連不到，顯示的是網站上的版本，最新的修改可能還沒出現。' };
+                    return { list: validProjects(j.projects), settings: j.settings || {}, sha: null, note: 'GitHub 暫時連不到，顯示的是網站上的版本，最新的修改可能還沒出現。' };
                 } catch { return { list: [], sha: null, note: '讀不到共用專案清單。' }; }
             }
         }
@@ -1796,6 +1797,7 @@
         async function refreshProjects() {
             const r = await fetchProjects();
             projects = r.list;
+            projectSettings = r.settings || {};
             projectsNote = r.note || '';
         }
 
@@ -1804,23 +1806,25 @@
         const isMember = () => !!getToken();
         const isPublic = p => p?.visibility === 'public';
         const canSee = p => !!p && (isMember() || isPublic(p));
+        const builtinPublic = () => projectSettings.builtin_visibility !== 'private';
 
         // 改共用專案：每次都拿 GitHub 上最新的清單來改，別人同時改也不會互相蓋掉
-        async function commitProjects(mutate, message) {
+        async function commitProjects(mutate, message, mutateSettings = x => x) {
             const token = await requireToken();
             for (let attempt = 0; attempt < 3; attempt++) {
-                const { list, sha } = await fetchProjects({ strict: true });
+                const { list, sha, settings } = await fetchProjects({ strict: true });
                 const next = mutate(structuredClone(list));
+                const nextSettings = mutateSettings(structuredClone(settings || {}));
                 const body = {
                     message, branch: 'main',
-                    content: b64encode(JSON.stringify({ format: 'bim-concrete-cost-projects', projects: next }, null, 1) + '\n'),
+                    content: b64encode(JSON.stringify({ format: 'bim-concrete-cost-projects', ...(Object.keys(nextSettings).length ? { settings: nextSettings } : {}), projects: next }, null, 1) + '\n'),
                 };
                 if (sha) body.sha = sha;
                 const r = await fetch(PROJECTS_API, {
                     method: 'PUT', body: JSON.stringify(body),
                     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
                 });
-                if (r.ok) { projects = next; projectsNote = ''; return; }
+                if (r.ok) { projects = next; projectSettings = nextSettings; projectsNote = ''; return; }
                 if (r.status === 409 || r.status === 422) continue;   // 剛好有人同時改，重拿一次
                 if (r.status === 401) { setToken(''); throw new Error('GitHub 權杖無效或已過期，請重新輸入'); }
                 if (r.status === 403 || r.status === 404) throw new Error('這個權杖沒有寫入 repo 的權限（Contents 要選 Read and write）');
@@ -1940,6 +1944,7 @@
 
         async function openProject(id) {
             const isBuiltin = id === BUILTIN.id;
+            if (isBuiltin && !isMember() && !builtinPublic()) return showHome();
             currentProject = isBuiltin ? null : findProject(id);
             if (!isBuiltin && !canSee(currentProject)) { currentProject = null; return showHome(); }
             if (location.hash.slice(1) !== 'project=' + id) history.replaceState(null, '', '#project=' + id);
@@ -2008,11 +2013,11 @@
 
         function renderProjectList() {
             const official = data.versions[data.versions.length - 1];
-            const cards = [projectCard({
-                id: BUILTIN.id, name: BUILTIN.name, tag: '網站正式資料',
-                detail: `${data.versions.length} 個版本 · 最新 ${official.version} ${official.total_volume.toLocaleString('en-US')} m³ · 更新 ${esc(data.generated_at)}`,
-            })];
             const member = isMember();
+            const cards = member || builtinPublic() ? [projectCard({
+                id: BUILTIN.id, name: BUILTIN.name, tag: '網站正式資料', visibility: member ? (builtinPublic() ? 'public' : 'private') : null,
+                detail: `${data.versions.length} 個版本 · 最新 ${official.version} ${official.total_volume.toLocaleString('en-US')} m³ · 更新 ${esc(data.generated_at)}`,
+            })] : [];
             for (const p of projects.filter(canSee)) {
                 const last = p.versions[p.versions.length - 1];
                 cards.push(projectCard({
@@ -2022,7 +2027,7 @@
                         : '還沒有體積檔',
                 }));
             }
-            document.getElementById('project-list').innerHTML = cards.join('');
+            document.getElementById('project-list').innerHTML = cards.join('') || '<p class="text-xs text-slate-500 p-3">目前沒有公開的專案。</p>';
             const note = document.getElementById('projects-note');
             note.innerText = projectsNote;
             note.classList.toggle('hidden', !projectsNote);
@@ -2040,6 +2045,13 @@
         }
 
         async function toggleVisibility(id) {
+            if (id === BUILTIN.id) {
+                const next = builtinPublic() ? 'private' : 'public';
+                try {
+                    await commitProjects(list => list, `「${BUILTIN.name}」改為${next === 'public' ? '公開' : '私人'}`, st => ({ ...st, builtin_visibility: next }));
+                } catch (e) { alert('切換失敗：' + e.message); }
+                return renderProjectList();
+            }
             const p = findProject(id);
             if (!p) return;
             const next = isPublic(p) ? 'private' : 'public';

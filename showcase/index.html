@@ -205,7 +205,8 @@ import { CSS2DRenderer, CSS2DObject } from './vendor/CSS2DRenderer.js';
 
 /* ---------- 可調整的文字 ---------- */
 const TITLE_SUB = '夜燈不滅：為晚歸選手而生的 BIM 訓練大樓設計';
-const DASH_URL = '../#project=builtin';
+const G3_PROJECT_ID = 'pmwyoqd8nagpf';   // 成本儀表板與 QR code 開的專案（選手大樓-新版，需設為公開）
+const DASH_URL = '../#project=' + G3_PROJECT_ID;
 const SITE_URL = 'https://nkhs-arch.github.io/bim-concrete-cost/';
 const SHOW_URL = 'https://nkhs-arch.github.io/bim-concrete-cost/showcase/';
 
@@ -238,7 +239,7 @@ const CF280 = D ? D.carbon_factors['280'].factor : 338;
 
 // 成本數字讀成本網站上的 G3 專案（data/projects.json「選手大樓-新版」最新版本的逐列數量），
 // 跟成本網站同一套算法：混凝土 × 工程會單價、鋼筋比、模板（模型面積）、紅磚，單價依主計總處指數調整，碳排用 LEBR 係數
-const G3_PROJECT = { id: 'pmwyoqd8nagpf', name: '選手大樓-新版' };
+const G3_PROJECT = { id: G3_PROJECT_ID, name: '選手大樓-新版' };
 const WALL_REBAR = null;   // RC 牆鋼筋比（kg/m³），給數字後鋼筋才會算牆
 const [PROJS, RATES, REBAR] = await Promise.all([
   fetch('../data/projects.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),
@@ -993,7 +994,7 @@ function go(i) {
   // 互動元件
   panel.querySelectorAll('figure').forEach(f => f.onclick = () => openLB(f.dataset.src, f.dataset.cap));
   const od = panel.querySelector('#openDash'); if (od) od.onclick = openDash;
-  if (panel.querySelector('#qr1')) { drawQR('qr1', SITE_URL + '#project=builtin'); drawQR('qr2', SHOW_URL); }
+  if (panel.querySelector('#qr1')) { drawQR('qr1', SITE_URL + '#project=' + G3_PROJECT_ID); drawQR('qr2', SHOW_URL); }
   blip(); startTimer();
 }
 function setSun(v) { sun.position.copy(v).multiplyScalar(260); sun.target.position.set(0, 0, 0); }
