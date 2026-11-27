@@ -810,7 +810,7 @@ const CH = [
       <div class="qr"><div id="qr1"></div>成本儀表板</div>
       <div class="qr"><div id="qr2"></div>這個展示網頁</div>
     </div>
-    <p class="note">參考資料：版面參考「板橋站共構開發案互動資訊圖表」（a767thycode.github.io/banqiao-station-infographic）；地圖 © OpenStreetMap 貢獻者（ODbL）；分析 Autodesk Forma；三維引擎 three.js（MIT 授權）；成本網站原始碼 github.com/nkhs-arch/bim-concrete-cost。</p>` },
+    <p class="note">參考資料：地圖 © OpenStreetMap 貢獻者（ODbL）；分析 Autodesk Forma；三維引擎 three.js（MIT 授權）；成本網站原始碼 github.com/nkhs-arch/bim-concrete-cost。</p>` },
 ];
 
 /* ---------- 導覽 ---------- */
@@ -820,7 +820,7 @@ CH.forEach((c, i) => {
   b.innerHTML = `<span class="n">${String(i).padStart(2, '0')}</span><span class="t">${c.k}</span><span class="pg"></span>`;
   b.onclick = () => { go(i); poke(); }; nav.appendChild(b);
 });
-document.getElementById('srcnote').textContent = `模型：G3 量體（Dynamo 自動建模）｜地圖 © OpenStreetMap 貢獻者｜成本：結構練習模型 ${V.version}，${PRICE_MONTH} 單價｜版面參考：板橋站共構開發案互動資訊圖表`;
+document.getElementById('srcnote').textContent = `模型：G3 量體（Dynamo 自動建模）｜地圖 © OpenStreetMap 貢獻者｜成本：結構練習模型 ${V.version}，${PRICE_MONTH} 單價`;
 
 let cur = -1, bldAlpha = 1, bldTarget = 1, explodeT = 0, explodeTarget = 0, sunAnim = null, sunHour = 6;
 function setOpacity(mats, o) { for (const m of mats) { m.transparent = o < 1; m.opacity = o; m.depthWrite = o >= 1; } }
