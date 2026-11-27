@@ -759,7 +759,8 @@ function flyTo(pose, dur = 1800) {
 /* ---------- 章節 ---------- */
 const bar = (name, val, max, txt, hl) => `<div class="bar${hl ? ' hl' : ''}"><span>${name}</span><span class="t"><i style="width:${Math.max(2, val / max * 100)}%"></i></span><span class="n">${txt}</span></div>`;
 const stat = (v, u, k, hl) => `<div class="stat${hl ? ' hl' : ''}"><div class="v">${v}<small>${u}</small></div><div class="k">${k}</div></div>`;
-const fig = (src, cap) => `<figure data-src="img/${src}.jpg" data-cap="${cap}"><img src="img/${src}.jpg" alt="${cap}" loading="lazy"><figcaption>${cap}</figcaption></figure>`;
+const IMG_V = '20261127b';   // 換圖時改這個，避免瀏覽器用舊的快取圖
+const fig = (src, cap) => `<figure data-src="img/${src}.jpg?v=${IMG_V}" data-cap="${cap}"><img src="img/${src}.jpg?v=${IMG_V}" alt="${cap}" loading="lazy"><figcaption>${cap}</figcaption></figure>`;
 const eb = (i, txt) => `<div class="eyebrow"><span class="no">${String(i).padStart(2, '0')}</span>${txt}</div>`;
 
 function sparkSVG() {
